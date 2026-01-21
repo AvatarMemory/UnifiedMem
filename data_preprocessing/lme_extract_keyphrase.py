@@ -1,0 +1,119 @@
+import os
+import json
+from tqdm import tqdm
+from openai import OpenAI
+import openai
+import backoff
+from multiprocessing import Pool
+import time
+
+
+# Local env loader (data_preprocessing lives outside `src/` so it uses nearest .env files)
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load env files with precedence: repo-root .env (defaults) then local .env (overrides)
+REPO_ROOT = Path(__file__).resolve().parents[1]
+load_dotenv(REPO_ROOT / '.env', override=False)
+load_dotenv(Path(__file__).parent / '.env', override=True)
+
+# Config 
+NUM_WORKERS = int(os.getenv('NUM_WORKERS', '64'))
+SAVE_EVERY = int(os.getenv('SAVE_EVERY', '256'))
+KEYPHRASE_MAX_TOKENS = int(os.getenv('KEYPHRASE_MAX_TOKENS', '100'))
+KEYPHRASE_TEMPERATURE = float(os.getenv('KEYPHRASE_TEMPERATURE', '0.0'))
+LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://localhost:8001/v1')
+
+# OpenAI credentials (can be set in repo `.env` or data_preprocessing `.env`)
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
+OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', LLM_BASE_URL)
+# MODEL_NAME = 'meta-llama/Meta-Llama-3.1-8B-Instruct'
+MODEL_NAME = os.getenv('LLM_MODEL', 'gpt-4o-mini')
+
+
+@backoff.on_exception(backoff.constant, (openai.RateLimitError), 
+                      interval=5)
+def chat_completions_with_backoff(client, **kwargs):
+    return client.chat.completions.create(**kwargs)
+
+
+def generate_session_keyphrases(sess_entry, model_name):
+    # Always construct an OpenAI client with configured API key and base URL
+    client_api_key = OPENAI_API_KEY or 'empty'
+    client = OpenAI(api_key=client_api_key, base_url=OPENAI_BASE_URL)
+    summarization_prompt = "Below is a transcript of a conversation between a human user and an AI assistant. Generate a list of keyphrases for the session. Separate each keyphrase with a semicolon. Dialogue content:\n"
+    for turn_entry in sess_entry:
+        summarization_prompt += f"\n{turn_entry['role']}: {turn_entry['content']}"
+    summarization_prompt += '\n\nKeyphrases (separated by semicolon):'
+    # print(summarization_prompt)
+
+    kwargs = {
+        'model': model_name,
+        'messages': [
+            {"role": "user", "content": summarization_prompt}
+        ],
+        'n': 1,
+        'temperature': KEYPHRASE_TEMPERATURE,
+        'max_tokens': KEYPHRASE_MAX_TOKENS,
+    }
+    completion = chat_completions_with_backoff(client,**kwargs) 
+    return completion.choices[0].message.content.strip()
+
+
+def process_single(args):
+    """Worker function for multiprocessing"""
+    sess_id, sess_entry, model_name = args
+    try:
+        expansion = generate_session_keyphrases(sess_entry, model_name)
+        return sess_id, expansion, None
+    except Exception as e:
+        return sess_id, None, str(e)
+
+
+if __name__ == '__main__':
+    in_file = 'data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json'
+    # in_file = 'data/longmemeval_s_cleaned.json'
+    cache_folder = 'data/longmemeval-cleaned/expansions-gpt4o_mini_temp1'
+    os.makedirs(cache_folder, exist_ok=True)
+    cache_file = f'{cache_folder}/session-keyphrase_.json'
+
+    if os.path.isfile(cache_file):
+        data = json.load(open(cache_file))
+        print('Loaded:', cache_file)
+    else:
+        data = {}
+
+    in_data = json.load(open(in_file))
+
+    todo_sessions = {}
+    for entry in in_data:
+        for sess_id, sess in zip(entry['haystack_session_ids'], entry['haystack_sessions']):
+            if sess_id in todo_sessions:
+                assert todo_sessions[sess_id] == sess, "Conflict session content for id: " + sess_id
+            todo_sessions[sess_id] = sess
+
+    todo_sessions = [(i, s) for i, s in todo_sessions.items() if i not in data]
+    
+    print(f"Total sessions to process: {len(todo_sessions)}")
+    print(f"Already processed: {len(data)}")
+    
+    # Prepare args for multiprocessing
+    process_args = [(sess_id, sess, MODEL_NAME) for sess_id, sess in todo_sessions]
+    
+    # Multiprocessing with periodic saving
+    processed_count = 0
+    with Pool(NUM_WORKERS) as pool:
+        for sess_id, expansion, error in tqdm(pool.imap_unordered(process_single, process_args), total=len(process_args)):
+            if error:
+                print(f"Error processing {sess_id}: {error}")
+                continue
+            data[sess_id] = expansion
+            processed_count += 1
+            
+            # Save every SAVE_EVERY samples
+            if processed_count % SAVE_EVERY == 0:
+                json.dump(data, open(cache_file, 'w'))
+                print(f"\nSaved checkpoint at {processed_count} new samples (total: {len(data)})")
+        
+    json.dump(data, open(cache_file, 'w'))
+    print(f"Done! Total entries saved: {len(data)}")
