@@ -65,7 +65,7 @@ def parse_args():
     parser.add_argument('--llm_backend', type=str, default=cfg.getenv('LLM_BACKEND', 'openai'), choices=['openai'], help='LLM backend')
     parser.add_argument('--api_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', 'EMPTY')),
                         help='API key for LLM (can be set via env LLM_API_KEY or OPENAI_API_KEY)')
-    parser.add_argument('--base_url', type=str, default=cfg.getenv('LLM_BASE_URL', 'http://localhost:8001/v1'),
+    parser.add_argument('--base_url', type=str, default=cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1'),
                         help='Base URL for LLM API (for vLLM)')
     parser.add_argument('--temperature', type=float, default=cfg.get_float('LLM_TEMPERATURE', 0.0), help='Temperature for LLM generation')
     

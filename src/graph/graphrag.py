@@ -28,6 +28,7 @@ from ._op import (
     global_query,
     naive_query,
     longmemeval_query,
+    halumem_query,
 )
 from ._storage import (
     JsonKVStorage,
@@ -261,6 +262,18 @@ class GraphRAG:
             raise ValueError("enable_naive_rag is False, cannot query in naive mode")
         if param.mode == "longmemeval":
             response = await longmemeval_query(
+                query,
+                self.chunk_entity_relation_graph,
+                self.entities_vdb,
+                self.relations_vdb,
+                self.community_reports,
+                self.text_chunks,
+                param,
+                self.tokenizer_wrapper,
+                asdict(self),
+            )
+        elif param.mode == "halumem":
+            response = await halumem_query(
                 query,
                 self.chunk_entity_relation_graph,
                 self.entities_vdb,

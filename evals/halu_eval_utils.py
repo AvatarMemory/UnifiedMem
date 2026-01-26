@@ -7,7 +7,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from tenacity import retry, stop_after_attempt, wait_random_exponential, before_sleep_log
 
-
 load_dotenv()
 
 logger = logging.getLogger(__name__)

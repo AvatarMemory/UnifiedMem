@@ -66,7 +66,7 @@ conda activate meminsight
 pip install -r requirements.txt
 ```
 
-Environment variable examples
+Environment variable examples (Note: Environment variables may be overridden by settings in the configuration files)
 
 ```bash
 # Set necessary environment variables
@@ -95,7 +95,7 @@ For detailed environment variable configurations, refer to the [Configuration Fi
 
 ### LongMemEval
 
-LongMemEval (s/m) contains 500 questions, each associated with numerous dialogue sessions. Download guidance refer to the original repository.
+LongMemEval (s/m) contains 500 questions, each associated with numerous dialogue sessions. Download guidance refer to the original repository. The default storage location for the dataset is `{project_root}/data/longmemeval-cleaned`.
 
 Once downloaded, run:
 
@@ -112,7 +112,7 @@ HaluMem evaluates memory systems' ability to handle hallucinations and memory up
 - **HaluMem-Medium**: `data/HaluMem/HaluMem-Medium.jsonl` - Moderate conversation length
 - **HaluMem-Long**: `data/HaluMem/HaluMem-Long.jsonl` - Extended conversations with distractors
 
-To download HaluMem, follow the official repository [link](https://github.com/MemTensor/HaluMem).
+To download HaluMem, follow the official repository [link](https://github.com/MemTensor/HaluMem). The default storage location is `{project_root}/data/HaluMem`. In our experiments, we only considered HaluMem-Medium as it is already sufficiently challenging.
 
 ---
 
@@ -129,7 +129,7 @@ python data_preprocessing/lme_extract_keyphrase.py
 python data_preprocessing/lme_extract_userfact.py
 ```
 
-Note that you need to set the input data path and output expansion path in the extraction scripts or via their CLI arguments.
+Note that you need to set the input data path and output expansion path in the extraction scripts or via their CLI arguments. For environment variable settings, refer to the [Configuration](#configuration) and [Configuration Files](#configuration-files) sections.
 
 ##### 1. Run Retrieval
 
@@ -170,13 +170,14 @@ Support no expansion and multiple expansions.
 python evals/lme_compute_recall.py \
     --in_file <retrieval_log_file> \
     --oracle_file data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json \
-    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json
+    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json \
+    --out_file <out_file>
 ```
 
 ##### 3. Generate Answers (Optional)
 
 ```bash
-python lme_run_generation.py \
+python evals/lme_run_generation.py \
     --in_file <retrieval_log_file> \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
@@ -202,37 +203,44 @@ python evals/lme_compute_qa.py gpt-4o <generation_output_file> data/longmemeval-
 
 #### Graph Method
 
-Graph retrieval consists of two steps: first construct the graph, then run the graph retrieval script. In terms of parameter mapping, flat's `--retriever`/`--index_expansion_method` corresponds to graph's `--embedding`/`--graphrag-mode`, etc.
+Graph retrieval consists of two steps: first construct the graph, then run the graph retrieval script. Logically, flat's `--retriever`/`--index_expansion_method` corresponds to graph's `--embedding`/`--graphrag-mode`, etc.
 
 ##### 1. Construct Graph and Run Retrieval
 ```bash
 # Construct the graph (if not already built)
-./scripts/graph_lme_construct.sh --input data/longmemeval-cleaned/longmemeval_m_cleaned.json --llm-model gpt-4o-mini
+./scripts/graph_lme_construct.sh \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir data/graph_s-gpt-4o-mini \
+  --embedding  text-embedding-3-small \
+  --entity-namespace openai_name_entities
 
 # Run graph retrieval
 ./scripts/graph_lme_run_retrieval.sh \
-  --embedding contriever \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir results/graph_lme/ \
+  --embedding  text-embedding-3-small \
   --graphrag-mode entity,chunk,one-hot-expand \
-  --out_dir results/graph_lme/ \
-  --top_k 10
+  --only-need-context
 ```
 
 ##### 2. Compute Recall Metrics
 The retrieval output of graph (e.g., `graph_retrieval_results-*.json`) has a structure compatible with flat retrieval logs, so `evals/lme_compute_recall.py` can be directly reused to compute recall.
 ```bash
 python evals/lme_compute_recall.py \
-    --in_file results/graph_lme/graph_retrieval_results-...json \
+    --in_file <retrieval_log_file> \
     --oracle_file data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json \
-    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json
+    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json \
+    --out_file <out_file>
 ```
 
 ##### 3. Generate Answers and Evaluate QA Performance (Optional)
 When using generation (QA) for evaluation, if the input is the `graph_retrieval_results-*.json` obtained from graph retrieval, it can be passed to `lme_run_generation.py`. The generation process is identical to flat.
 ```bash
-python lme_run_generation.py \
-    --in_file results/graph_lme/graph_retrieval_results-...json \
+python evals/lme_run_generation.py \
+    --in_file <retrieval_log_file> \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
+    --cot true \
     --out_dir <output_directory>
 
 python evals/lme_compute_qa.py gpt-4o <generation_output_file> data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json
@@ -303,7 +311,7 @@ Default configurations suggested by HaluMem is provided in  `evals/.env`/
 
 ```bash
 python evals/halu_eval.py \
-    --results_dir <output_directory>
+  --file_path <structure_eval_results.jsonl>
 ```
 
 ---
@@ -313,58 +321,68 @@ python evals/halu_eval.py \
 ##### 1. Construct and Run Graph Retrieval
 ```bash
 # Construct and run graph retrieval
-./scripts/graph_halu_construct.sh --input data/HaluMem/HaluMem-Medium.jsonl --llm-model gpt-4o-mini
-./scripts/graph_halu_run_retrieval.sh --embedding stella --graphrag-mode entity,rank-entity --out_dir results/graph_halu/ --top_k 10
+./scripts/graph_halu_construct.sh --in-file data/HaluMem/HaluMem-Medium.jsonl --llm-model gpt-4o-mini
+./scripts/graph_halu_run_retrieval.sh \
+ --graph-root data/nc-graph_halu_mem_medium-4o-mini \
+ --out-dir results/graph_halu/ \
+ --embedding text-embedding-3-small \
+ --graphrag-mode entity,chunk,one-hot-expand \
+ --only-need-context
 ```
 
 ##### 2. Generate Intermediate Files and Run Offline Evaluation (Recommended Workflow)
-Offline evaluation for the graph method requires first generating intermediate files (e.g., `add_memory_by_session.json`) using the `--mode` parameter of `evals/halu_graph_eval.py`. Then, merge the retrieval results with these intermediate files to form the offline evaluation input, and finally run the evaluation script to compute metrics. Recommended steps:
+The original evaluation code for HaluMem used an online approach, building the graph while recording experimental results. For modularity considerations, we recommend using an offline approach for this part of the evaluation. Offline evaluation for the graph method requires first generating intermediate files (e.g., `add_memory_by_session.json`) using the `--mode` parameter of `evals/halu_graph_eval.py`. Then, merge the retrieval results with these intermediate files to form the offline evaluation input, and finally run the evaluation script to compute metrics. Recommended steps:
 
 1. Generate add_memory (parse GraphML, output `add_memory_by_session.json`)
 ```bash
-python evals/halu_graph_eval.py --mode add_memory
+python evals/halu_graph_eval.py --mode add_memory \
+  --graph_root data/nc-graph_halu_mem_medium-4o-mini \
+  --out_path <output_file_directory>
 ```
-This command writes `add_memory_by_session.json` to the default project path `data/nc-graph_halu_mem_medium-4o-mini/`.
+This command writes `add_memory_by_session.json` to the location specified by `--out_path` (if `--out_path` is not provided, the script will default to writing under `--graph_root`).
 
-2. Place the graph retrieval output (`graph_retrieval_results-*.json`) in the same directory (`data/nc-graph_halu_mem_medium-4o-mini/`), or ensure `--retrieve_file_name` points to a file name that the script can find. Then run the merge to generate the offline evaluation input (`*_test_eval_results.jsonl`):
+2. Specify the retrieval result file (filename or full path) with `--retrieve_file_path`, or place the graph retrieval output (`graph_retrieval_results-*.json`) in the same directory (`data/nc-graph_halu_mem_medium-4o-mini/`). Then run the merge to generate the offline evaluation input (`*_test_eval_results.jsonl`). It is recommended to explicitly specify the output file `--out_path` in the command line:
 ```bash
 python evals/halu_graph_eval.py --mode gen_eval \
-  --retrieve_file_name graph_retrieval_results_entity-chunk-1hop-top20.json \
-  --out_suffix _test_eval_results.jsonl \
-  --dataset_data_filename HaluMem-Medium.jsonl \
+  --graph_root data/nc-graph_halu_mem_medium-4o-mini \
+  --retrieve_file_path <retrieval_file_path> \
+  --out_path <output_file_directory> \
+  --dataset_path <HaluMem_dataset_path> \
   [--use_entity]
 ```
-- `--retrieve_file_name`: Retrieval result filename (the script will look for this file under `data/nc-graph_halu_mem_medium-4o-mini/`)
-- `--out_suffix`: Suffix for the merged output file (default `_test_eval_results.jsonl`)
+- `--retrieve_file_path`: Path or filename of the retrieval result file (relative filenames will be searched under `--graph_root`)
+- `--out_path`: Output directory. The script will write the result file inferred from the retrieval filename under this directory, e.g., `graph_retrieval_results-xxx.json` → `graph_retrieval_results-xxx_test_eval_results.jsonl`. If a path ending with `.json` or `.jsonl` is provided, it is treated as a full file path (backward compatibility).
+- `--out_suffix`: Suffix for the merged output file (default `_test_eval_results.jsonl`, used for inference only when a specific output filename is not provided)
+- `--dataset_path`: Path to the HaluMem dataset
 - `--use_entity`: Optional, enable entity-based context construction (otherwise use chunk-based context)
 
-This step writes a merged JSONL file (one line per user's evaluation input) next to the retrieval file, to be used for downstream offline evaluation.
+This step writes a merged JSONL file (one line per user's evaluation input) in the directory specified by `--out_path` (or the default location next to the retrieval file), to be used for downstream offline evaluation.
 
 3. Run Offline Evaluation
 Provide the JSONL generated in the previous step to `evals/halu_eval.py` for metric calculation. For example:
 ```bash
-python evals/halu_eval.py --results_dir data/nc-graph_halu_mem_medium-4o-mini/
+python evals/halu_eval.py --file_path <path/to/*_eval_results.jsonl>
 ```
-Depending on the actual file organization, you can also move the generated `*_test_eval_results.jsonl` to a separate `results` directory and point `--results_dir` to its parent directory.
+Depending on the actual file organization, you can also move the generated `*_test_eval_results.jsonl` to a separate `results` directory and point `--file_path` to its location.
 
 Notes:
-- `--mode` supports `add_memory` (parse GraphML), `gen_eval` (merge and generate evaluation JSONL), `test_llm` (quick test LLM calls). The `retrieve_memory` option exists in the script but is not implemented (commented out).
+- `--mode` supports `add_memory` (parse GraphML), `gen_eval` (merge and generate evaluation JSONL), `test_llm` (quick test LLM calls).
 - Ensure that the `--out_dir` from `graph_halu_run_retrieval.sh` or the location where you move/copy the retrieval results matches the path expected by `halu_graph_eval.py` (`data/nc-graph_halu_mem_medium-4o-mini/`). Alternatively, adjust the script parameters/environment variable `PROJECT_ROOT` accordingly to correctly read the retrieval results and generate offline evaluation files.
 
 ---
 
 ### General Evaluation Notes
 
-The evaluation scripts under the `evals/` directory in this repository are common to both flat and graph retrieval/recall evaluations. The main differences lie in how the retrieval output is generated and the additional graph files (GraphML) for diagnostics and visualization.
+The evaluation scripts under the `evals/` directory in this repository are common to both flat and graph retrieval/recall evaluations. The main differences lie in how the retrieval output is generated and the additional graph files (GraphML).
 
 **General Workflow (Applicable to LongMemEval and HaluMem):**
-1.  **Run Retrieval** (flat or graph) to generate retrieval logs (flat typically outputs retrieval logs in JSON/JSONL, graph outputs `graph_retrieval_results-*.json` and additionally produces GraphML files).
+1.  **Run Retrieval** (flat or graph) to generate retrieval logs (flat typically outputs retrieval logs in JSON/JSONL, graph outputs `graph_retrieval_results-*.json` and additionally produces GraphML files as graph construction results).
 2.  **Compute Recall**: Use scripts like `evals/lme_compute_recall.py`.
 3.  **Generate Answers and Evaluate QA** (Optional): Use the same generation scripts as flat (`lme_run_generation.py`, `evals/lme_compute_qa.py` or `halu_eval.py`).
 
 **Key Points:**
 - **Commonality**: Both flat and graph produce retrieval logs that can be processed by the generic scripts under `evals/` (the recall/QA pipeline can be reused).
-- **Differences**: The graph pipeline additionally outputs GraphML files. For HaluMem evaluation, an offline approach is used. The graph retrieval generation script names and output paths are typically different (scripts with the `graph_*` prefix).
+- **Differences**: The graph pipeline additionally outputs GraphML files as graph construction results. For HaluMem evaluation, an offline approach is used. The graph retrieval generation script names and output paths are typically different (scripts with the `graph_*` prefix).
 - **Recommendation**: When comparing flat and graph, keep the same oracle/haystack input files and top_k settings to ensure comparability of evaluation results.
 
 ## System Architecture
@@ -459,30 +477,32 @@ bash scripts/halu_run.sh \
 Below shows how to use the scripts provided in the repository to construct graphs and run graph-based retrieval (for LongMemEval / HaluMem). The output includes GraphML files per question/session and `graph_retrieval_results-*.json`.
 
 ```bash
-# Construct graph for LongMemEval (writes per-question folders under data/graph_s-* or data/graph_m-*)
+# Construct graph for LongMemEval
 ./scripts/graph_lme_construct.sh \
-  --input data/longmemeval-cleaned/longmemeval_m_cleaned.json \
-  --llm-model gpt-4o-mini \
-  --out_dir data/graph_m-gpt-4o-mini/
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir data/graph_s-gpt-4o-mini \
+  --embedding  text-embedding-3-small \
+  --entity-namespace openai_name_entities
 
 # Run graph-based retrieval for LongMemEval
 ./scripts/graph_lme_run_retrieval.sh \
-  --embedding contriever \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir results/graph_lme/ \
+  --embedding  text-embedding-3-small \
   --graphrag-mode entity,chunk,one-hot-expand \
-  --out_dir results/graph_lme/ \
-  --top_k 10
+  --only-need-context
 
 # Construct graph and run retrieval for HaluMem
 ./scripts/graph_halu_construct.sh \
-  --input data/HaluMem/HaluMem-Medium.jsonl \
-  --llm-model gpt-4o-mini \
-  --out_dir data/graph_halu/
+ --in-file data/HaluMem/HaluMem-Medium.jsonl \
+ --llm-model gpt-4o-mini
 
 ./scripts/graph_halu_run_retrieval.sh \
-  --embedding stella \
-  --graphrag-mode entity,rank-entity \
-  --out_dir results/graph_halu/ \
-  --top_k 10
+ --graph-root data/nc-graph_halu_mem_medium-4o-mini \
+ --out-dir results/graph_halu/ \
+ --embedding text-embedding-3-small \
+ --graphrag-mode entity,chunk,one-hot-expand \
+ --only-need-context
 ```
 
 Notes:
@@ -522,13 +542,58 @@ Each line in the output file contains:
 
 ### HaluMem Results
 
-Results are saved in `<out_dir>/<frame>-<version>/`:
-- `structure_eval_results.jsonl`: Per-question results with retrieved contexts and generated answers
+Results are saved in `<out_file_path>/`:
+- `*_eval_results.jsonl`: Per-question results with retrieved contexts and generated answers
 - `user_*.json` (in `tmp/`): Intermediate user-level results with memory operations
 - Memory operation logs and statistics
 
 ## Configuration Files
 
+This repository drives runtime configuration through environment variables and layered `.env` files. Configuration loading order:
+1. Terminal environment variables
+2. `.env` in the project root directory
+3. `.env` in subdirectories (e.g., `evals/`)
+4. Command line arguments
+
+Below are the commonly used environment variables in the repository (defaults can be found in `.env.example` in the repository root):
+
+- `OPENAI_API_KEY`: API Key for OpenAI or OpenAI-compatible backends (default: empty string).
+  - Purpose: For calling OpenAI API, third-party compatible servers, or proxies (e.g., vLLM/OpenAI-compat services).
+
+- `OPENAI_BASE_URL`: Base URL for OpenAI-compatible services (default: `http://localhost:8001/v1`).
+  - Purpose: Set when using self-hosted vLLM/OpenAI-compat services, e.g., `http://localhost:8001/v1`.
+
+- `LLM_MODEL`: Default model for generation (default: `gpt-4o-mini`).
+  - Examples: `gpt-4o-mini`, `gpt-4o`, `meta-llama/Meta-Llama-3.1-8B-Instruct`.
+
+- `EMBEDDING_MODEL`: Embedding model for vectorization (default: `text-embedding-3-small`).
+- `EMBEDDING_RETRIEVER`: Embedding retriever selection (default: `flat-openai`).
+
+- `EMBEDDING_API_URL`: Optional third-party embedding service URL (default: empty).
+- `EMBEDDING_API_KEY`: API Key for `EMBEDDING_API_URL` (default: empty).
+  - Note: When using an external embedding provider, the system POSTs `{ "model": ..., "input": [...] }` and expects an OpenAI-like response structure.
+
+- `CACHE_DIR`: Model/data cache directory (default: `data/cache`).
+
+- `NUM_WORKERS`: Default number of processes for multiprocessing/parallel tasks (default: `64`, can be adjusted for data preprocessing scenarios).
+- `SAVE_EVERY`: Checkpoint saving frequency for long tasks (default: `256`).
+
+- `LLM_TEMPERATURE`: Default temperature for LLM inference (default: `0.0`).
+- `QA_LLM`: Default LLM for QA (default: `gpt-4o-mini`).
+
+- `KEYPHRASE_MAX_TOKENS`, `KEYPHRASE_TEMPERATURE`: Default parameters for keyphrase extraction (defaults: `100`, `0.0` respectively).
+- `SUMMARY_MAX_TOKENS`, `SUMMARY_TEMPERATURE`: Default parameters for summary extraction (defaults: `500`, `0.0` respectively).
+- `USERFACT_MAX_TOKENS`, `USERFACT_TEMPERATURE`: Default parameters for user fact extraction (defaults: `2000`, `1.0` respectively).
+
+Example: Setting environment variables in Linux/macOS shell:
+```bash
+export OPENAI_API_KEY="your_api_key"
+export OPENAI_BASE_URL="http://localhost:8001/v1"
+```
+
+Recommendation: Place project-level defaults in the root directory `.env` file (the repository already includes `.env.example`), and place overriding `.env` files specific to sub-processes (e.g., `evals/`, `data_preprocessing/`) in the respective subdirectories.
+
+Below explains the current repository's support for models:
 ### Model Support
 
 **Embedding Models:**
@@ -542,7 +607,7 @@ Results are saved in `<out_dir>/<frame>-<version>/`:
 **LLM Models:**
 - OpenAI models: `gpt-4o-mini`, `gpt-4`, etc.
 - Local models via vLLM: `meta-llama/Meta-Llama-3.1-8B-Instruct`, etc.
-- Third-party API services configured via ...
+- Third-party API services configured via environment variables
 
 ## Development
 

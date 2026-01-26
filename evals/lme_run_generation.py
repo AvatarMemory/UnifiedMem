@@ -2,10 +2,17 @@
 """
 
 import os
+import sys
 import json
 from tqdm import tqdm
 import openai
 from openai import OpenAI
+
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
 from src import config as cfg
 import backoff
 from datetime import datetime
@@ -21,7 +28,7 @@ def parse_args():
     parser.add_argument('--out_file_suffix', type=str, default="")
         
     parser.add_argument('--model_name', type=str, default=cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'))
-    parser.add_argument('--openai_base_url', type=str, default=cfg.getenv('LLM_BASE_URL', 'http://localhost:8001/v1'))
+    parser.add_argument('--openai_base_url', type=str, default=cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1'))
     parser.add_argument('--openai_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', 'EMPTY')))
     parser.add_argument('--openai_organization', type=str, default=cfg.getenv('OPENAI_ORGANIZATION', None))
 
@@ -332,16 +339,26 @@ def main(args):
 
     try:
         in_data = json.load(open(args.in_file))
+        if isinstance(in_data, dict):
+            in_data = [in_data]
     except:
         in_data = [json.loads(line) for line in open(args.in_file).readlines()]
 
     in_file_tmp = args.in_file.split('/')[-1]
     if args.merge_key_expansion_into_value is not None and args.merge_key_expansion_into_value != 'none':
-        out_file = args.out_dir + '/' + in_file_tmp + '_testlog_top{}context_{}format_useronly{}_factexpansion{}_{}'.format(args.topk_context, args.history_format, args.useronly, args.merge_key_expansion_into_value, datetime.now().strftime("%Y%m%d-%H%M"))
+        out_file = os.path.join(args.out_dir, in_file_tmp + '_testlog_top{}context_{}format_useronly{}_factexpansion{}_{}'.format(args.topk_context, args.history_format, args.useronly, args.merge_key_expansion_into_value, datetime.now().strftime("%Y%m%d-%H%M")))
     else:
-        out_file = args.out_dir + '/' + in_file_tmp + '_testlog_top{}context_{}format_useronly{}_{}'.format(args.topk_context, args.history_format, args.useronly, datetime.now().strftime("%Y%m%d-%H%M"))
+        out_file = os.path.join(args.out_dir, in_file_tmp + '_testlog_top{}context_{}format_useronly{}_{}'.format(args.topk_context, args.history_format, args.useronly, datetime.now().strftime("%Y%m%d-%H%M")))
     if args.out_file_suffix.strip() != "":
         out_file += args.out_file_suffix
+    # Ensure output directory exists
+    try:
+        os.makedirs(args.out_dir, exist_ok=True)
+    except Exception:
+        # If args.out_dir is empty or invalid, fallback to current directory
+        args.out_dir = '.'
+        os.makedirs(args.out_dir, exist_ok=True)
+
     out_f = open(out_file, 'w')
 
     # inference

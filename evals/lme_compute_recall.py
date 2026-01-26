@@ -10,6 +10,15 @@ from tqdm import tqdm
 import os
 import sys
 
+import os
+import sys
+
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    __package__ = 'evals'
+
 from .lme_eval_utils import evaluate_retrieval
 
 def parse_args():

@@ -7,23 +7,14 @@ import copy
 import argparse
 from tqdm import tqdm
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dotenv import load_dotenv
+import sys
 
-# Layered dotenv loading for scripts outside `src/`:
-# 1) Load repository-level `.env` (defaults)
-# 2) Load directory-level `.env` (overrides)
-script_dir = os.path.dirname(__file__)
-repo_root = os.path.abspath(os.path.join(script_dir, '..'))
-repo_env = os.path.join(repo_root, '.env')
-local_env = os.path.join(script_dir, '.env')
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
-if os.path.exists(repo_env):
-    # load repo defaults, do not override existing env
-    load_dotenv(repo_env, override=False)
-
-if os.path.exists(local_env):
-    # load local overrides and allow them to override repo values
-    load_dotenv(local_env, override=True)
+from src import config as cfg
 
 
 from evals.halu_eval_utils import (
@@ -111,8 +102,24 @@ def process_user(idx: int, user_data: dict, max_workers: int = 10):
         golden_memories = session["memory_points"]
         extract_memories = session["extracted_memories"]
 
-        extract_memories = [";".join(m) if isinstance(m, list) else m for m in extract_memories]
+        # Normalize extracted memories:
+        # - non-graph: list of strings
+        # - graph: list of dicts -> convert each dict to a JSON string
+        processed_extract_memories = []
+        for m in extract_memories:
+            if isinstance(m, dict):
+                try:
+                    s = json.dumps(m, ensure_ascii=False, separators=(",", ":"))
+                except Exception:
+                    s = str(m)
+            elif isinstance(m, list):
+                # join list elements into a single string
+                s = ";".join([str(x) for x in m])
+            else:
+                s = str(m)
+            processed_extract_memories.append(s)
 
+        extract_memories = processed_extract_memories
         extract_memories_str = "\n".join(extract_memories)
         for memory in golden_memories:
             if memory["is_update"] == "True" and memory.get("memories_from_system", []):
@@ -455,14 +462,19 @@ def iter_jsonl(file_path):
 
 
 def main(
-    dir_path: str,
+    file_path: str,
     user_num: int = 20,
     max_workers: int = 10
 ):
-    data_path = f"{dir_path}/structure_eval_results.jsonl"
-    output_file = os.path.join(dir_path, f"eval_stat_result.json")
+    # Require a path to the JSONL file containing per-user structures.
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"Input file not found: {file_path}")
 
-    tmp_dir = os.path.join(dir_path, "tmp2")
+    data_path = os.path.abspath(file_path)
+    base_dir = os.path.dirname(data_path)
+    output_file = os.path.join(base_dir, "eval_stat_result.json")
+
+    tmp_dir = os.path.join(base_dir, "tmp2")
     os.makedirs(tmp_dir, exist_ok=True)
 
     start_time = time.time()
@@ -566,13 +578,15 @@ def main(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dir_path",
+        "--file_path",
         type=str,
-        default=''
+        required=True,
+        help="Path to the `structure_eval_results.jsonl` file"
     )
     args = parser.parse_args()
-    dir_path = args.dir_path
-    main(dir_path)
-    
-    output_file = os.path.join(dir_path, f"eval_stat_result.json")
+    file_path = args.file_path
+    main(file_path)
+
+    base_dir = os.path.dirname(os.path.abspath(file_path))
+    output_file = os.path.join(base_dir, "eval_stat_result.json")
     print_scores(output_file)

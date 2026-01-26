@@ -12,6 +12,13 @@ import openai
 from openai import OpenAI
 import numpy as np
 
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
+from src import config as cfg
+
 
 model_zoo = {
     'llama-3.1-70b-instruct': ('meta-llama/Meta-Llama-3.1-70B-Instruct', 'local'),
@@ -65,12 +72,14 @@ if __name__ == '__main__':
         exit()
     metric_model, metric_model_source = model_zoo[metric_model_short]
     if metric_model_source == 'openai':
-        openai.organization = os.getenv('OPENAI_ORGANIZATION')
-        openai_api_key = os.getenv('OPENAI_API_KEY')
+        # Prefer project config/env via src.config
+        openai.organization = cfg.getenv('OPENAI_ORGANIZATION', os.getenv('OPENAI_ORGANIZATION'))
+        openai_api_key = cfg.getenv('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY'))
         openai_api_base = None
     else:
         openai_api_key = "EMPTY"
-        openai_api_base = "http://localhost:8001/v1"
+        # Resolve base URL for local/other model backends from project config first
+        openai_api_base = cfg.getenv('OPENAI_BASE_URL', cfg.getenv('LLM_BASE_URL', os.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
     
     metric_client = OpenAI(
         api_key=openai_api_key,

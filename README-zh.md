@@ -66,7 +66,7 @@ conda activate meminsight
 pip install -r requirements.txt
 ```
 
-环境变量示例
+环境变量示例，环境变量会被配置文件里的设置所覆盖。
 
 ```bash
 # 设置必要的环境变量
@@ -95,7 +95,7 @@ export HF_HOME="/path/to/cache"        # HuggingFace 模型的缓存目录
 
 ### LongMemEval
 
-LongMemEval (s/m) 包含 500 个问题，每个问题关联多个对话会话。下载指南请参考原始仓库。
+LongMemEval (s/m) 包含 500 个问题，每个问题关联多个对话会话。下载指南请参考原始仓库。数据集默认存放位置为{project_root}/data/longmemeval-cleaned。
 
 下载完成后，运行：
 
@@ -112,11 +112,7 @@ HaluMem 评估记忆系统处理幻觉和记忆更新的能力。
 - **HaluMem-Medium**: `data/HaluMem/HaluMem-Medium.jsonl` - 中等长度的对话
 - **HaluMem-Long**: `data/HaluMem/HaluMem-Long.jsonl` - 包含干扰项的扩展对话
 
-要下载 HaluMem，请遵循官方仓库 [链接](https://github.com/MemTensor/HaluMem)。
-
-根据您的要求，我将内容重新组织为四个清晰的子部分：**Flat (LongMemEval)**、**Flat (HaluMem)**、**Graph (LongMemEval)** 和 **Graph (HaluMem)**。这样可以更对称地展示两种方法在两个数据集上的使用流程。
-
----
+要下载 HaluMem，请遵循官方仓库 [链接](https://github.com/MemTensor/HaluMem)。数据集默认存放位置{project_root}/data/HaluMem，在我们的实验中只考虑了HaluMem-Medium，因为它已经足够有挑战性。
 
 ## 使用方法
 
@@ -130,7 +126,7 @@ python data_preprocessing/lme_extract_summ.py
 python data_preprocessing/lme_extract_keyphrase.py
 python data_preprocessing/lme_extract_userfact.py
 ```
-请注意，你需要在提取脚本中或通过其 CLI 参数设置输入数据路径和输出扩展路径。
+请注意，你需要在提取脚本中或通过其 CLI 参数设置输入数据路径和输出扩展路径，有关环境变量的设置，参照[配置](#配置)和[配置文件](#配置文件)章节。
 
 ##### 1. 运行检索
 ```bash
@@ -167,12 +163,13 @@ python data_preprocessing/lme_extract_userfact.py
 python evals/lme_compute_recall.py \
     --in_file <检索日志文件> \
     --oracle_file data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json \
-    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json
+    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json \
+    --out_file <out_file> 
 ```
 
 ##### 3. 生成答案（可选）
 ```bash
-python lme_run_generation.py \
+python evals/lme_run_generation.py \
     --in_file <检索日志文件> \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
@@ -196,37 +193,44 @@ python evals/lme_compute_qa.py gpt-4o <生成输出文件> data/longmemeval-clea
 
 #### 图方法
 
-Graph 检索由两步构成：首先构建图，然后运行图检索脚本。参数映射上，flat 的 `--retriever`/`--index_expansion_method` 对应 graph 的 `--embedding`/`--graphrag-mode` 等。
+Graph 检索由两步构成：首先构建图，然后运行图检索脚本。逻辑上，flat 的 `--retriever`/`--index_expansion_method` 对应 graph 的 `--embedding`/`--graphrag-mode` 等。
 
 ##### 1. 构建图与运行检索
 ```bash
 # 构建图（如果尚未构建）
-./scripts/graph_lme_construct.sh --input data/longmemeval-cleaned/longmemeval_m_cleaned.json --llm-model gpt-4o-mini
+./scripts/graph_lme_construct.sh \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir data/graph_s-gpt-4o-mini \
+  --embedding  text-embedding-3-small \
+  --entity-namespace openai_name_entities
 
 # 运行图检索
 ./scripts/graph_lme_run_retrieval.sh \
-  --embedding contriever \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir results/graph_lme/ \
+  --embedding  text-embedding-3-small \
   --graphrag-mode entity,chunk,one-hot-expand \
-  --out_dir results/graph_lme/ \
-  --top_k 10
+  --only-need-context
 ```
 
 ##### 2. 计算召回率指标
 graph 的检索输出（例如 `graph_retrieval_results-*.json`）结构与 flat 的检索日志兼容，因此可以直接复用 `evals/lme_compute_recall.py` 计算召回。
 ```bash
 python evals/lme_compute_recall.py \
-    --in_file results/graph_lme/graph_retrieval_results-...json \
+    --in_file <检索日志文件> \
     --oracle_file data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json \
-    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json
+    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json \
+    --out_file <out_file> 
 ```
 
 ##### 3. 生成答案与评估 QA 性能（可选）
 使用生成（QA）评估时，若输入是 graph 检索得到的 `graph_retrieval_results-*.json`，可以将其传给 `lme_run_generation.py`，生成流程与 flat 完全相同。
 ```bash
-python lme_run_generation.py \
-    --in_file results/graph_lme/graph_retrieval_results-...json \
+python evals/lme_run_generation.py \
+    --in_file <检索日志文件> \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
+    --cot true \
     --out_dir <输出目录>
 
 python evals/lme_compute_qa.py gpt-4o <生成输出文件> data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json
@@ -294,7 +298,7 @@ python evals/lme_compute_qa.py gpt-4o <生成输出文件> data/longmemeval-clea
 HaluMem 建议的默认配置在 `evals/.env` 中提供。
 ```bash
 python evals/halu_eval.py \
-    --results_dir <输出目录>
+  --file_path <structure_eval_results.jsonl>
 ```
 
 ---
@@ -304,42 +308,52 @@ python evals/halu_eval.py \
 ##### 1. 构建并运行图检索
 ```bash
 # 构建并运行图检索
-./scripts/graph_halu_construct.sh --input data/HaluMem/HaluMem-Medium.jsonl --llm-model gpt-4o-mini
-./scripts/graph_halu_run_retrieval.sh --embedding stella --graphrag-mode entity,rank-entity --out_dir results/graph_halu/ --top_k 10
+./scripts/graph_halu_construct.sh --in-file data/HaluMem/HaluMem-Medium.jsonl --llm-model gpt-4o-mini
+./scripts/graph_halu_run_retrieval.sh \
+ --graph-root data/nc-graph_halu_mem_medium-4o-mini \
+ --out-dir results/graph_halu/ \
+ --embedding text-embedding-3-small \
+ --graphrag-mode entity,chunk,one-hot-expand \
+ --only-need-context
 ```
 
 ##### 2. 生成中间文件并运行离线评估（推荐流程）
-图方法的离线评估需先用 `evals/halu_graph_eval.py` 的 `--mode` 参数生成若干中间文件（例如 `add_memory_by_session.json`），再把检索结果与这些中间文件合并为离线评估输入，最后运行评估脚本计算指标。推荐步骤如下：
+原先用于评估halumem的代码采用在线方式，边建图边记录相应实验结果，基于对模块化的考虑，我们推荐使用离线方式进行该部分评估。图方法的离线评估需先用 `evals/halu_graph_eval.py` 的 `--mode` 参数生成若干中间文件（例如 `add_memory_by_session.json`），再把检索结果与这些中间文件合并为离线评估输入，最后运行评估脚本计算指标。推荐步骤如下：
 
 1. 生成 add_memory（解析 GraphML，输出 `add_memory_by_session.json`）
 ```bash
-python evals/halu_graph_eval.py --mode add_memory
+python evals/halu_graph_eval.py --mode add_memory \
+  --graph_root data/nc-graph_halu_mem_medium-4o-mini \
+  --out_path <输出文件目录>
 ```
-该命令会在项目默认路径 `data/nc-graph_halu_mem_medium-4o-mini/` 下写出 `add_memory_by_session.json`。
+该命令会在 `--out_path` 指定的位置写出 `add_memory_by_session.json`（如果未提供 `--out_path`，脚本会默认写入 `--graph_root`下）。
 
-2. 将图检索输出（`graph_retrieval_results-*.json`）放到同一目录（`data/nc-graph_halu_mem_medium-4o-mini/`），或确保 `--retrieve_file_name` 指向能被脚本找到的文件名，然后运行合并生成离线评估输入（`*_test_eval_results.jsonl`）：
+2. 用 `--retrieve_file_path` 指定检索结果文件（文件名或完整路径），或将图检索输出（`graph_retrieval_results-*.json`）放到同一目录（`data/nc-graph_halu_mem_medium-4o-mini/`），然后运行合并生成离线评估输入（`*_test_eval_results.jsonl`）。推荐在命令行显式指定输出文件 `--out_path`：
 ```bash
 python evals/halu_graph_eval.py --mode gen_eval \
-  --retrieve_file_name graph_retrieval_results_entity-chunk-1hop-top20.json \
-  --out_suffix _test_eval_results.jsonl \
-  --dataset_data_filename HaluMem-Medium.jsonl \
+  --graph_root data/nc-graph_halu_mem_medium-4o-mini \
+  --retrieve_file_path <检索文件路径> \
+  --out_path <输出文件目录> \
+  --dataset_path <Halumem数据集路径> \
   [--use_entity]
 ```
-- `--retrieve_file_name`：检索结果文件名（脚本会在 `data/nc-graph_halu_mem_medium-4o-mini/` 下查找该文件）
-- `--out_suffix`：合并输出文件的后缀（默认 `_test_eval_results.jsonl`）
+-- `--retrieve_file_path`：检索结果文件的路径或文件名（相对文件名会在 `--graph_root` 下查找）
+- `--out_path`：输出目录。脚本会在该目录下写出基于检索文件名推断的结果文件，例如 `graph_retrieval_results-xxx.json` → `graph_retrieval_results-xxx_test_eval_results.jsonl`。若传入以 `.json` 或 `.jsonl` 结尾的路径，则视为完整文件路径（向后兼容）。
+- `--out_suffix`：合并输出文件的后缀（默认 `_test_eval_results.jsonl`，仅在未指定具体输出文件名时用于推断）
+- `--dataset_path`：HaluMem数据集路径
 - `--use_entity`：可选，启用基于实体的上下文构建（否则使用 chunk-based 上下文）
 
-这一步会在检索文件旁写出合并后的 JSONL（每行一个用户的评估输入），用于下游离线评估。
+这一步会在 `--out_path` 指定的目录（或检索文件旁边的默认位置）写出合并后的 JSONL（每行一个用户的评估输入），用于下游离线评估。
 
 3. 运行离线评估
 将上一步生成的 JSONL 提供给 `evals/halu_eval.py` 进行指标计算。例如：
 ```bash
-python evals/halu_eval.py --results_dir data/nc-graph_halu_mem_medium-4o-mini/
+python evals/halu_eval.py --file_path <path/to/*_eval_results.jsonl>
 ```
-根据实际文件组织，你也可以把生成的 `*_test_eval_results.jsonl` 移到一个单独的 `results` 目录并以 `--results_dir` 指向它所在目录。
+根据实际文件组织，你也可以把生成的 `*_test_eval_results.jsonl` 移到一个单独的 `results` 目录并以 `--file_path` 指向它所在目录。
 
 说明：
-- `--mode` 支持 `add_memory`（解析 GraphML）、`gen_eval`（合并并生成评估用 JSONL）、`test_llm`（快速测试 LLM 调用）。脚本中存在 `retrieve_memory` 选项但未实现（已注释）。
+- `--mode` 支持 `add_memory`（解析 GraphML）、`gen_eval`（合并并生成评估用 JSONL）、`test_llm`（快速测试 LLM 调用）。
 - 请确保 `graph_halu_run_retrieval.sh` 的 `--out_dir` 或你移动/复制检索结果的位置与 `halu_graph_eval.py` 所期望的 `data/nc-graph_halu_mem_medium-4o-mini/` 路径一致，或者相应调整脚本的参数/环境变量 `PROJECT_ROOT`，以便正确读取检索结果并生成离线评估文件。
 
 
@@ -347,7 +361,7 @@ python evals/halu_eval.py --results_dir data/nc-graph_halu_mem_medium-4o-mini/
 
 ### 通用评测说明
 
-本仓库中 `evals/` 目录下的评测脚本对 flat 与 graph 检测/召回评测是共通的。主要差别在于检索输出的生成方式和额外的图文件（GraphML）用于诊断与可视化。
+本仓库中 `evals/` 目录下的评测脚本对 flat 与 graph 检测/召回评测是共通的。主要差别在于检索输出的生成方式和额外的图文件（GraphML）。
 
 **通用流程（适用于 LongMemEval 与 HaluMem）：**
 1.  **运行检索**（flat 或 graph）以生成检索日志（flat 通常输出为检索日志 JSON/JSONL，graph 输出为 `graph_retrieval_results-*.json` 并另外产出 GraphML 文件）。
@@ -356,7 +370,7 @@ python evals/halu_eval.py --results_dir data/nc-graph_halu_mem_medium-4o-mini/
 
 **要点总结：**
 - **共同点**：flat 与 graph 均产出可供 `evals/` 下通用脚本处理的检索日志（召回/QA 流程可复用）。
-- **不同点**：graph 管道额外产出 GraphML，在halumem数据集上进行测评时使用离线方式；graph 的检索生成脚本名与输出路径通常不同（`graph_*` 前缀脚本）。
+- **不同点**：graph 管道额外产出 GraphML 格式的建图结果，在halumem数据集上进行测评时使用离线方式；graph 的检索生成脚本名与输出路径通常不同（`graph_*` 前缀脚本）。
 - **建议**：在比较 flat 与 graph 时保持相同的 oracle/haystack 输入文件与 top_k 设置，以确保评测可比性。
 
 
@@ -452,30 +466,31 @@ bash scripts/halu_run.sh \
 下面展示如何用仓库提供的脚本构建图并运行基于图的检索（LongMemEval / HaluMem）。输出包括每个问题/会话的 GraphML 文件和 `graph_retrieval_results-*.json`。
 
 ```bash
-# 为 LongMemEval 构建图（在 data/graph_s-* 或 data/graph_m-* 下为每个问题写入文件夹）
+# 为 LongMemEval 构建图
 ./scripts/graph_lme_construct.sh \
-  --input data/longmemeval-cleaned/longmemeval_m_cleaned.json \
-  --llm-model gpt-4o-mini \
-  --out_dir data/graph_m-gpt-4o-mini/
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir data/graph_s-gpt-4o-mini \
+  --embedding  text-embedding-3-small \
+  --entity-namespace openai_name_entities
 
 # 为 LongMemEval 运行基于图的检索
 ./scripts/graph_lme_run_retrieval.sh \
-  --embedding contriever \
+  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
+  --out-dir results/graph_lme/ \
+  --embedding  text-embedding-3-small \
   --graphrag-mode entity,chunk,one-hot-expand \
-  --out_dir results/graph_lme/ \
-  --top_k 10
+  --only-need-context
 
 # 为 HaluMem 构建图并运行检索
 ./scripts/graph_halu_construct.sh \
-  --input data/HaluMem/HaluMem-Medium.jsonl \
-  --llm-model gpt-4o-mini \
-  --out_dir data/graph_halu/
+ --in-file data/HaluMem/HaluMem-Medium.jsonl \     --llm-model gpt-4o-mini
 
 ./scripts/graph_halu_run_retrieval.sh \
-  --embedding stella \
-  --graphrag-mode entity,rank-entity \
-  --out_dir results/graph_halu/ \
-  --top_k 10
+ --graph-root data/nc-graph_halu_mem_medium-4o-mini \
+ --out-dir results/graph_halu/ \
+ --embedding text-embedding-3-small \
+ --graphrag-mode entity,chunk,one-hot-expand \
+ --only-need-context
 ```
 
 说明：
@@ -515,13 +530,58 @@ bash scripts/halu_run.sh \
 
 ### HaluMem 结果
 
-结果保存在 `<out_dir>/<frame>-<version>/`：
-- `structure_eval_results.jsonl`: 包含检索到的上下文和生成答案的每个问题的结果
+结果保存在 `<out_file_path>/`：
+- `*_eval_results.jsonl`: 包含检索到的上下文和生成答案的每个问题的结果
 - `user_*.json` (在 `tmp/` 中): 包含记忆操作的中间用户级别结果
 - 记忆操作日志和统计信息
 
 ## 配置文件
 
+本仓库通过环境变量与分层 `.env` 文件驱动运行时配置。配置加载顺序：
+1. 终端环境变量
+2. 项目根目录 `.env`
+3. 子目录（例如 `evals/`）中的 `.env`
+4. 命令行参数
+
+下面列出仓库中常用的环境变量（默认见仓库根目录的 `.env.example`）：
+
+- `OPENAI_API_KEY`：OpenAI 或 OpenAI 兼容后端的 API Key（默认：空字符串）。
+  - 用途：用于调用 OpenAI API、第三方兼容服务器或代理（例如 vLLM/OpenAI-compat 服务）。
+
+- `OPENAI_BASE_URL`：OpenAI 兼容服务的基础 URL（默认：`http://localhost:8001/v1`）。
+  - 用途：当使用自托管的 vLLM/OpenAI-compat 服务时设置，例如 `http://localhost:8001/v1`。
+
+- `LLM_MODEL`：默认用于生成的模型（默认：`gpt-4o-mini`）。
+  - 示例：`gpt-4o-mini`、`gpt-4o`、`meta-llama/Meta-Llama-3.1-8B-Instruct`。
+
+- `EMBEDDING_MODEL`：用于向量化的嵌入模型（默认：`text-embedding-3-small`）。
+- `EMBEDDING_RETRIEVER`：嵌入检索器选择（默认：`flat-openai`）。
+
+- `EMBEDDING_API_URL`：可选的第三方嵌入服务 URL（默认：空）。
+- `EMBEDDING_API_KEY`：用于 `EMBEDDING_API_URL` 的 API Key（默认：空）。
+  - 说明：当使用外部嵌入提供商时，系统会 POST `{ "model": ..., "input": [...] }` 并期望 OpenAI-like 响应结构。
+
+- `CACHE_DIR`：模型/数据缓存目录（默认：`data/cache`）。
+
+- `NUM_WORKERS`：多进程/并行任务的默认进程数（默认：`64`，数据预处理场景可调整）。
+- `SAVE_EVERY`：长任务中断点保存频率（默认：`256`）。
+
+- `LLM_TEMPERATURE`：LLM 推理的默认温度（默认：`0.0`）。
+- `QA_LLM`：默认用于 QA 的 LLM（默认：`gpt-4o-mini`）。
+
+- `KEYPHRASE_MAX_TOKENS`、`KEYPHRASE_TEMPERATURE`：关键短语抽取默认参数（分别默认 `100`、`0.0`）。
+- `SUMMARY_MAX_TOKENS`、`SUMMARY_TEMPERATURE`：摘要抽取默认参数（分别默认 `500`、`0.0`）。
+- `USERFACT_MAX_TOKENS`、`USERFACT_TEMPERATURE`：用户事实抽取默认参数（分别默认 `2000`、`1.0`）。
+
+示例：在 Linux/macOS shell 中设置环境变量的方式：
+```bash
+export OPENAI_API_KEY="your_api_key"
+export OPENAI_BASE_URL="http://localhost:8001/v1"
+```
+
+建议：将项目级默认值放入根目录 `.env` 文件（仓库已包含 `.env.example`），并在需要的子目录（例如 `evals/`、`data_preprocessing/`）放置特定于该子流程的覆盖 `.env` 文件。
+
+下面说明当前仓库对模型的支持：
 ### 模型支持
 
 **嵌入模型：**
@@ -535,7 +595,7 @@ bash scripts/halu_run.sh \
 **LLM 模型：**
 - OpenAI 模型：`gpt-4o-mini`, `gpt-4` 等
 - 通过 vLLM 的本地模型：`meta-llama/Meta-Llama-3.1-8B-Instruct` 等
-- 通过...设置的第三方api服务
+- 通过环境变量设置的第三方api服务
 
 ## 开发
 

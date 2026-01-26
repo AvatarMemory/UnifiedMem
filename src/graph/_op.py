@@ -1304,6 +1304,57 @@ async def longmemeval_query(
     )
     return response
 
+async def halumem_query(
+    query,
+    knowledge_graph_inst: BaseGraphStorage,
+    entities_vdb: BaseVectorStorage,
+    relations_vdb: BaseVectorStorage,
+    community_reports: BaseKVStorage[CommunitySchema],
+    text_chunks_db: BaseKVStorage[TextChunkSchema],
+    query_param: QueryParam,
+    tokenizer_wrapper,
+    global_config: dict,
+) -> str:
+    use_model_func = global_config["best_model_func"]
+    embedding_func = global_config["embedding_func"]
+
+    if query_param.graphrag_mode[0] == "entity":
+        context = await _build_query_context(
+            query,
+            knowledge_graph_inst,
+            entities_vdb,
+            community_reports,
+            text_chunks_db,
+            query_param,
+            tokenizer_wrapper,
+            embedding_func,
+        )
+    elif query_param.graphrag_mode[0] == "relation":
+        context = await _build_query_context_from_relations(
+            query,
+            knowledge_graph_inst,
+            relations_vdb,
+            entities_vdb,
+            community_reports,
+            text_chunks_db,
+            query_param,
+            tokenizer_wrapper,
+            embedding_func,
+        )
+        
+    if query_param.only_need_context:
+        return context
+    if context is None:
+        return PROMPTS["fail_response"]
+    sys_prompt_temp = PROMPTS["local_rag_response"]
+    sys_prompt = sys_prompt_temp.format(
+        context_data=context, response_type=query_param.response_type
+    )
+    response = await use_model_func(
+        query,
+        system_prompt=sys_prompt,
+    )
+    return response
 
 async def local_query(
     query,

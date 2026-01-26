@@ -16,7 +16,6 @@ from tenacity import retry, stop_after_attempt, wait_random_exponential, before_
 from tqdm import tqdm
 import copy
 from dotenv import load_dotenv
-from .halu_eval_utils import llm_request
 
 script_dir = os.path.dirname(__file__)
 repo_root = os.path.abspath(os.path.join(script_dir, '..'))
@@ -61,6 +60,15 @@ client = OpenAI(
     base_url=OPENAI_BASE_URL or None,
     api_key=OPENAI_API_KEY or None,
 )
+
+
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+    __package__ = 'evals'
+    
+from .halu_eval_utils import llm_request
 
 # Optional shared prompt template used by adapters
 PROMPT_ANSWER_COMPLEX = """
@@ -248,8 +256,8 @@ def make_context_from_rawcontext_entity(raw_context: List[dict], top_k: int = 20
 
 
 ### compute add_memory contents for evaluating
-def compute_addmemory():
-    filepath = os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
+def compute_addmemory(graph_root: str | None = None, out_path: str | None = None):
+    filepath = graph_root or os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
     """
     For each user (a directory under `filepath`), pick the session subdirectory with the
     largest numeric name. Parse that session's GraphML files (e.g. `graph_chunk_entity_relation.graphml`),
@@ -263,7 +271,12 @@ def compute_addmemory():
     Only the chosen (largest) session per user is parsed because it should contain all results.
     """
 
-    out_file = os.path.join(filepath, "add_memory_by_session.json")
+    # prefer explicit CLI output path if provided (re-using --out_path); otherwise default to graph_root/add_memory_by_session.json
+    if out_path:
+        os.makedirs(out_path, exist_ok=True)
+        out_file = os.path.join(out_path, "add_memory_by_session.json")
+    else:
+        out_file = os.path.join(filepath, "add_memory_by_session.json")
     sessions: Dict[str, List[Dict[str, Any]]] = {}
 
     if not os.path.isdir(filepath):
@@ -423,10 +436,12 @@ def compute_addmemory():
 
 ### gen file computing metrics
 def gen_eval_file(
-    retrieve_file_name: str = "graph_retrieval_results_entity-chunk-1hop-top20.json",
+    retrieve_file_path: str | None = None,
     use_entity: bool = False,
     out_suffix: str = "_test_eval_results.jsonl",
-    dataset_data_filename: str = "HaluMem-Medium.jsonl",
+    dataset_path: str | None = None,
+    graph_root: str | None = None,
+    out_path: str | None = None,
 ):
     """
     Generate an offline evaluation file that merges add-memory data (computed by
@@ -442,23 +457,47 @@ def gen_eval_file(
     Output:
       - Writes a JSONL file next to the retrieval input file using `out_suffix`.
     """
-    # modify there to adjust base data file paths
-    filepath = os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
+    # allow caller to override the graph root path
+    filepath = graph_root or os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
     add_mem_file = os.path.join(filepath, "add_memory_by_session.json")
-    retrieve_file_path = os.path.join(filepath, retrieve_file_name)
-    # Create result filepath by replacing .json with provided suffix; fallback if not ending with .json
-    if retrieve_file_path.lower().endswith(".json"):
-        res_filepath = retrieve_file_path.replace(".json", out_suffix)
+
+    # resolve retrieval file path: if user provided a path use it; otherwise assume default filename under graph root
+    if retrieve_file_path:
+        # if a relative filename was provided, prefer the file under the graph root
+        if not os.path.isabs(retrieve_file_path) and not os.path.exists(retrieve_file_path):
+            retrieve_file_path = os.path.join(filepath, retrieve_file_path)
     else:
-        res_filepath = retrieve_file_path + out_suffix
+        # default filename under graph root
+        retrieve_file_path = os.path.join(filepath, "graph_retrieval_results_entity-chunk-1hop-top20.json")
+    # If an explicit output path is provided via CLI, use it; otherwise place result file under graph_root
+    if out_path:
+        if not os.path.isdir(out_path):
+            os.makedirs(out_path, exist_ok=True)
+        base_name = os.path.basename(retrieve_file_path)
+        if base_name.lower().endswith(".json"):
+            out_name = base_name.replace(".json", out_suffix)
+        else:
+            out_name = base_name + out_suffix
+        res_filepath = os.path.join(out_path, out_name)
+    else:
+        base_name = os.path.basename(retrieve_file_path)
+        if base_name.lower().endswith(".json"):
+            out_name = base_name.replace(".json", out_suffix)
+        else:
+            out_name = base_name + out_suffix
+        res_filepath = os.path.join(filepath, out_name)
 
-    dataset_data_filepath = os.path.join(PROJECT_ROOT, "data", dataset_data_filename)
+    # resolve dataset path: allow absolute path or filename under PROJECT_ROOT/data
 
+    if dataset_path == None:
+        # warn and exit
+        logger.error("gen_eval_file: dataset_path must be provided")
+        return
     # read data
     add_mem = read_json(add_mem_file, default={})
     retrieval = read_json(retrieve_file_path, default={})
     dataset = []
-    with open(dataset_data_filepath, "r", encoding="utf-8") as f:
+    with open(dataset_path, "r", encoding="utf-8") as f:
         for i, line in enumerate(f, start=1):
             line = line.strip()
             if not line:
@@ -466,7 +505,7 @@ def gen_eval_file(
             try:
                 dataset.append(json.loads(line))
             except json.JSONDecodeError as e:
-                print(f"Skipping invalid JSONL line {i} in {dataset_data_filepath}: {e}")
+                print(f"Skipping invalid JSONL line {i} in {dataset_path}: {e}")
 
     # read user info from dataset_data
     # results: List[Dict[str, Any]] = []  # collect all users' processed data
@@ -549,23 +588,30 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Utility runner for halu_eval_graph tasks")
     parser.add_argument('--mode', type=str, choices=['gen_eval', 'add_memory', 'retrieve_memory', 'test_llm'], default='gen_eval',
                         help='Which operation to run (default: gen_eval)')
-    parser.add_argument('--retrieve_file_name', type=str, default="graph_retrieval_results_entity-chunk-1hop-top20.json")
+    parser.add_argument('--retrieve_file_path', type=str, default=None,
+                        help='(Optional) retrieval file path or filename under graph_root. If omitted, a default name under graph_root is used')
     parser.add_argument('--use_entity', action='store_true', help='Use entity-based context builder')
     parser.add_argument('--out_suffix', type=str, default="_test_eval_results.jsonl")
-    parser.add_argument('--dataset_data_filename', type=str, default="HaluMem-Medium.jsonl")
+    parser.add_argument('--dataset_path', type=str, default="HaluMem-Medium.jsonl",
+                        help='Path to the Halu dataset JSONL file (absolute path or filename under project `data/`)')
+    parser.add_argument('--out_path', type=str, default=None,
+                        help='(Optional) explicit output path for the merged eval JSONL or add_memory output (overrides graph_root placement)')
+    parser.add_argument('--graph_root', type=str, default=None, help='Path to graph root directory (overrides default data/nc-graph_halu_mem_medium-4o-mini)')
 
     args = parser.parse_args()
 
     if args.mode == 'test_llm':
         test_llm_request()
     elif args.mode == 'add_memory':
-        compute_addmemory()
+        compute_addmemory(args.graph_root, out_path=args.out_path)
     # elif args.mode == 'retrieve_memory':
     #     compute_retrievememory()
     else:
         gen_eval_file(
-            retrieve_file_name=args.retrieve_file_name,
+            retrieve_file_path=args.retrieve_file_path,
             use_entity=args.use_entity,
             out_suffix=args.out_suffix,
-            dataset_data_filename=args.dataset_data_filename,
+            dataset_path=args.dataset_path,
+            graph_root=args.graph_root,
+            out_path=args.out_path,
         )
