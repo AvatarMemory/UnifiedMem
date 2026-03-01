@@ -59,8 +59,8 @@
 
 ```bash
 # 创建 conda 环境并激活（示例）
-conda create -n meminsight python=3.11 -y
-conda activate meminsight
+conda create -n unifiedmem python=3.11 -y
+conda activate unifiedmem
 
 # 安装依赖
 pip install -r requirements.txt
@@ -113,9 +113,6 @@ HaluMem 评估记忆系统处理幻觉和记忆更新的能力。
 - **HaluMem-Long**: `data/HaluMem/HaluMem-Long.jsonl` - 包含干扰项的扩展对话
 
 要下载 HaluMem，请遵循官方仓库 [链接](https://github.com/MemTensor/HaluMem)。
-
-根据您的要求，我将内容重新组织为四个清晰的子部分：**Flat (LongMemEval)**、**Flat (HaluMem)**、**Graph (LongMemEval)** 和 **Graph (HaluMem)**。这样可以更对称地展示两种方法在两个数据集上的使用流程。
-
 ---
 
 ## 使用方法

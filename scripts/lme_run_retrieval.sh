@@ -1,10 +1,11 @@
-# in_file=${1:-"../data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json"}
-in_file=${1:-"./data/longmemeval_s_cleaned.json"}
+in_file=${1:-"./data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json"}
+# in_file=${1:-"./data/longmemeval_s_cleaned.json"}
 retriever=${2:-"flat-contriever"}
+# retriever=${2:-"flat-openai"}
 granularity=${3:-"session"}
-index_expansion=${4:-"none"}  # none, session-summ, session-keyphrase, session-userfact
-index_expansion_join_mode=${5:-"none"}   # separate, merge, merge_raw, none
-index_expansion_cache=${6:-"./data/longmemeval-cleaned/expansions-llama3.1_8b/session-userfact.json"}  # comma-separated list of cache files for each expansion method
+index_expansion=${4:-"session-userfact,session-keyphrase,session-summ"}  # none, session-summ, session-keyphrase, session-userfact
+index_expansion_join_mode=${5:-"merge"}   # separate, merge, merge_raw, none
+index_expansion_cache=${6:-"./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-userfact.json,./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-keyphrase_.json,./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-summ_.json"}  # comma-separated list of cache files for each expansion method
 aux_model_alias=${7:-"llama-3.1-8b-instruct-ICL"}
 outfile_prefix=${8:-"tmp"}
 declare -A model_zoo

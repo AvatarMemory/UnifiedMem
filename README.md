@@ -59,8 +59,8 @@ Quick setup — using conda (recommended)
 
 ```bash
 # Create and activate a conda environment (example)
-conda create -n meminsight python=3.11 -y
-conda activate meminsight
+conda create -n unifiedmem python=3.11 -y
+conda activate unifiedmem
 
 # Install dependencies
 pip install -r requirements.txt

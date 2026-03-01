@@ -72,9 +72,12 @@ def deduplicate_with_tracking(data, deduplication_mapping=None):
             - id_mapping: Dict mapping new_id -> original_id for deduplicated sessions
     """
     # Load mapping if it's a file path
-    if isinstance(deduplication_mapping, str) and os.path.isfile(deduplication_mapping):
-        with open(deduplication_mapping, 'r') as f:
-            deduplication_mapping = json.load(f)
+    if isinstance(deduplication_mapping, str):
+        if os.path.isfile(deduplication_mapping):
+            with open(deduplication_mapping, 'r') as f:
+                deduplication_mapping = json.load(f)
+        else:
+            deduplication_mapping = None
     
     # Convert existing mapping list to a dict of original_id -> new_id for efficient lookup
     # This allows us to reuse the same new_id for duplicate original_ids
