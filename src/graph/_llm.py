@@ -24,6 +24,8 @@ from .base import BaseKVStorage
 import src.config as config
 # API key selection: prefer generic LLM_API_KEY, then OPENAI_API_KEY, then OPENAI_KEY
 OPENAI_KEY = config.getenv('LLM_API_KEY', config.getenv('OPENAI_API_KEY', default=config.getenv('OPENAI_KEY', default=None)))
+LLM_MODEL = config.getenv('LLM_MODEL', 'gpt-4o-mini')
+OPENAI_BASE_URL = config.getenv('OPENAI_BASE_URL', None)
 # Embedding / model names and service URLs from config (with sensible defaults)
 CONTRIEVER_MODEL_NAME = config.getenv('CONTRIEVER_MODEL_NAME', 'facebook/contriever')
 OPENAI_EMBEDDING_MODEL = config.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
@@ -32,9 +34,8 @@ OPENAI_EMBEDDING_MODEL = config.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding
 # `OPENAI_EMBEDDING_MODEL` for backwards compatibility.
 EMBEDDING_MODEL = config.getenv('EMBEDDING_MODEL', OPENAI_EMBEDDING_MODEL)
 OPENAI_EMBEDDING_MODEL = EMBEDDING_MODEL
-EMBEDDING_API_URL = config.getenv('EMBEDDING_API_URL', None)
-EMBEDDING_API_KEY = config.getenv('EMBEDDING_API_KEY', None)
-OPENAI_BASE_URL = config.getenv('OPENAI_BASE_URL', None)
+EMBEDDING_API_URL = config.getenv('EMBEDDING_API_URL', OPENAI_BASE_URL)
+EMBEDDING_API_KEY = config.getenv('EMBEDDING_API_KEY', OPENAI_KEY)
 VLLM_BASE_URL = config.getenv('VLLM_BASE_URL', 'http://localhost:11230/v1')
 VLLM_MODEL_PATH = config.getenv('VLLM_MODEL_PATH', '/mnt/ceph/huggingface/Meta-Llama-3.1-8B-Instruct')
 
@@ -44,6 +45,7 @@ global_amazon_bedrock_async_client = None
 global_vllm_async_client = None
 global_contriever_model = None
 global_contriever_tokenizer = None
+global_openai_async_embedding_client = None
 
 
 def get_openai_async_client_instance():
@@ -56,6 +58,15 @@ def get_openai_async_client_instance():
             global_openai_async_client = AsyncOpenAI(api_key=OPENAI_KEY)
     return global_openai_async_client
 
+def get_openai_async_embedding_client_instance():
+    global global_openai_async_embedding_client
+    if global_openai_async_embedding_client is None:
+        # include base_url if provided (used for vLLM or proxy endpoints)
+        if EMBEDDING_API_URL:
+            global_openai_async_embedding_client = AsyncOpenAI(api_key=EMBEDDING_API_KEY, base_url=EMBEDDING_API_URL)
+        else:
+            global_openai_async_embedding_client = AsyncOpenAI(api_key=EMBEDDING_API_KEY)
+    return global_openai_async_embedding_client
 
 def get_vllm_async_client_instance():
     global global_vllm_async_client
@@ -118,7 +129,8 @@ async def openai_complete_if_cache(
     if not use_vllm:
         openai_async_client = get_openai_async_client_instance()
     else:
-        openai_async_client = get_vllm_async_client_instance()
+        # openai_async_client = get_vllm_async_client_instance()
+        openai_async_client = get_openai_async_client_instance()
     
     hashing_kv: BaseKVStorage = kwargs.pop("hashing_kv", None)
     messages = []
@@ -233,6 +245,16 @@ def create_amazon_bedrock_complete_function(model_id: str) -> Callable:
     
     return bedrock_complete
 
+async def llm_complete(
+    prompt, system_prompt=None, history_messages=[], **kwargs
+) -> str:
+    return await openai_complete_if_cache(
+        LLM_MODEL,
+        prompt,
+        system_prompt=system_prompt,
+        history_messages=history_messages,
+        **kwargs,
+    )
 
 async def gpt_4o_complete(
     prompt, system_prompt=None, history_messages=[], **kwargs
@@ -314,7 +336,7 @@ async def amazon_bedrock_embedding(texts: list[str]) -> np.ndarray:
     retry=retry_if_exception_type((RateLimitError, APIConnectionError)),
 )
 async def openai_embedding(texts: list[str]) -> np.ndarray:
-    openai_async_client = get_openai_async_client_instance()
+    openai_async_client = get_openai_async_embedding_client_instance()
     
     # Truncate texts to 8191 tokens to avoid API errors
     encoding = tiktoken.get_encoding("cl100k_base")

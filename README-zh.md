@@ -160,6 +160,8 @@ python data_preprocessing/lme_extract_userfact.py
 4. 修复了 LongMemEval 中改变会话 ID（更改 ‘answer’ 前缀）导致 ID 查找不匹配的问题
 
 ##### 2. 计算召回率指标
+上面的脚本中也会运行`evals/lme_compute_recall`，从而直接得到召回率指标。我们也可以通过中间生成的检索文件计算相应指标：
+
 ```bash
 python evals/lme_compute_recall.py \
     --in_file <检索日志文件> \
@@ -198,7 +200,7 @@ Graph 检索由两步构成：首先构建图，然后运行图检索脚本。�
 ##### 1. 构建图与运行检索
 ```bash
 # 构建图（如果尚未构建）
-./scripts/graph_lme_construct.sh --input data/longmemeval-cleaned/longmemeval_m_cleaned.json --llm-model gpt-4o-mini
+./scripts/graph_lme_construct.sh 
 
 # 运行图检索
 ./scripts/graph_lme_run_retrieval.sh \

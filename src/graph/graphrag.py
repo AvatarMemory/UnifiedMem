@@ -9,6 +9,7 @@ from .prompt import PROMPTS
 from ._llm import (
     amazon_bedrock_embedding,
     create_amazon_bedrock_complete_function,
+    llm_complete,
     gpt_4o_complete,
     gpt_5_mini_complete,
     vllm_complete,
@@ -124,11 +125,13 @@ class GraphRAG:
     using_amazon_bedrock: bool = False
     best_model_id: str = "us.anthropic.claude-3-sonnet-20240229-v1:0"
     cheap_model_id: str = "us.anthropic.claude-3-haiku-20240307-v1:0"
-    best_model_func: callable = gpt_4o_complete
+    # best_model_func: callable = gpt_4o_complete
+    best_model_func: callable = llm_complete
     best_model_max_token_size: int = 32768
     best_model_max_async: int = 16
-    cheap_model_func: callable = gpt_4o_mini_complete
+    # cheap_model_func: callable = gpt_4o_mini_complete
     # cheap_model_func: callable = vllm_complete
+    cheap_model_func: callable = llm_complete
     cheap_model_max_token_size: int = 32768
     cheap_model_max_async: int = 16
 

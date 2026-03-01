@@ -65,7 +65,7 @@ def main(args=None):
 
         # Include LLM model in per-question workdir name so it reflects the active model
         model_tag = cfg.getenv('LLM_MODEL', 'gpt-4o-mini')
-        work_dir = os.path.join(args.out_dir, f"q{question_id}-{model_tag}")
+        work_dir = os.path.join(args.out_dir, f"{question_id}-{model_tag}")
         kwargs = {"working_dir": work_dir}
         if entity_namespace is not None:
             kwargs["entity_vdb_namespace"] = entity_namespace
