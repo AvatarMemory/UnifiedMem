@@ -2,6 +2,17 @@
 
 # Does Memory Need Graphs? A Unified Framework and Empirical Analysis for Long-Term Dialog Memory
 
+<div align="center">
+  <div align="center">
+    <p>
+      <a href="https://arxiv.org/abs/2601.01280v2"><img src="https://img.shields.io/badge/Project-Homepage-00d9ff?style=for-the-badge&logo=github&logoColor=white&labelColor=1a1a2e"></a>
+      <a href="https://arxiv.org/abs/2601.01280v2"><img src="https://img.shields.io/badge/arXiv-2601.01280-B31B1B?style=for-the-badge&logo=arxiv&logoColor=red" alt="arXiv Paper"></a>
+      <a href="README-zh.md"><img src="https://img.shields.io/badge/🇨🇳中文版-1a1a2e?style=for-the-badge"></a>
+      <a href="README.md"><img src="https://img.shields.io/badge/🇺🇸English-1a1a2e?style=for-the-badge"></a>
+    </p>
+  </div>
+</div>
+
 <p align="center">
   <img src="./README.assets/unified_framework.png" style="max-width: min(100%, 1000px); height: auto;" alt="Unified Framework Diagram">
 </p>
