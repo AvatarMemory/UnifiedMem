@@ -2,6 +2,7 @@ import sys
 import time
 import json
 import threading
+import os
 from tqdm import tqdm
 import openai
 from openai import OpenAI
@@ -15,27 +16,33 @@ import tiktoken
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import traceback
 
+if __package__ is None and __name__ == '__main__':
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
+from src import config as cfg
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--in_file', type=str, required=True)
-    parser.add_argument('--out_dir', type=str, required=True)
+    parser.add_argument('--in_file', type=str)
+    parser.add_argument('--out_dir', type=str)
     parser.add_argument('--out_file_suffix', type=str, default="")
         
-    parser.add_argument('--model_name', type=str, required=True)
-    parser.add_argument('--model_alias', type=str, required=True)
-    parser.add_argument('--openai_base_url', type=str, default=None)
-    parser.add_argument('--openai_key', type=str, required=True)
-    parser.add_argument('--openai_organization', type=str, default=None)
+    parser.add_argument('--model_name', type=str, default=cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'))
+    parser.add_argument('--model_alias', type=str)
+    parser.add_argument('--openai_base_url', type=str, default=cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1'))
+    parser.add_argument('--openai_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', 'EMPTY')))
+    parser.add_argument('--openai_organization', type=str, default=cfg.getenv('OPENAI_ORGANIZATION', None))
 
-    parser.add_argument('--retriever_type', type=str, required=True)
-    parser.add_argument('--topk_context', type=int, required=True)
-    parser.add_argument('--history_format', type=str, required=True, choices=['json', 'nl'])
-    parser.add_argument('--useronly', type=str, required=True, choices=['true', 'false'])
-    parser.add_argument('--cot', type=str, required=True, choices=['true', 'false'])
+    parser.add_argument('--retriever_type', type=str, default='flat-session')
+    parser.add_argument('--topk_context', type=int, default=5)
+    parser.add_argument('--history_format', type=str, default='json', choices=['json', 'nl'])
+    parser.add_argument('--useronly', type=str, default='false', choices=['true', 'false'])
+    parser.add_argument('--cot', type=str, default='true', choices=['true', 'false'])
     parser.add_argument('--con', type=str, required=False, choices=['true', 'false'], default='false')
 
     # user fact expansion
@@ -398,14 +405,16 @@ def main(args):
         'mistral-7b-instruct-v0.2': 32000,
         'mistral-7b-instruct-v0.3': 32000,
         'In2Training/FILM-7B': 32000,
+        'qwen3-8b': 40960,
     }
     model_max_length = model2maxlength[args.model_name]
 
-    if 'gpt-4' in args.model_name.lower() or 'gpt-3.5' in args.model_name.lower():
+    # if 'gpt-4' in args.model_name.lower() or 'gpt-3.5' in args.model_name.lower():
+    if 1:
         tokenizer = tiktoken.get_encoding('o200k_base')
         tokenizer_backend = 'openai'
     else:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name, token="hf_xxxxx")
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name, token="hf-xxxx")
         tokenizer_backend = 'huggingface'
 
     total_prompt_tokens, total_completion_tokens = 0, 0

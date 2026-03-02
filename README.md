@@ -208,19 +208,13 @@ Graph retrieval consists of two steps: first construct the graph, then run the g
 ##### 1. Construct Graph and Run Retrieval
 ```bash
 # Construct the graph (if not already built)
-./scripts/graph_lme_construct.sh \
-  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
-  --out-dir data/graph_s-gpt-4o-mini \
-  --embedding  text-embedding-3-small \
-  --entity-namespace openai_name_entities
+./scripts/graph_lme_construct.sh 
 
 # Run graph retrieval
 ./scripts/graph_lme_run_retrieval.sh \
-  --in-file data/longmemeval-cleaned/longmemeval_s_cleaned.json \
-  --out-dir results/graph_lme/ \
-  --embedding  text-embedding-3-small \
-  --graphrag-mode entity,chunk,one-hot-expand \
-  --only-need-context
+  --embedding contriever \
+  --graphrag-mode entity,chunk \
+  --out_dir results/graph_lme/ 
 ```
 
 ##### 2. Compute Recall Metrics
@@ -234,16 +228,17 @@ python evals/lme_compute_recall.py \
 ```
 
 ##### 3. Generate Answers and Evaluate QA Performance (Optional)
-When using generation (QA) for evaluation, if the input is the `graph_retrieval_results-*.json` obtained from graph retrieval, it can be passed to `lme_run_generation.py`. The generation process is identical to flat.
+When using generation (QA) evaluation, if the input is the graph_retrieval_results-*.json obtained from graph retrieval, you need to convert its format using data_preprocessing/lme_trans_graph_retrieval.py, and then pass it to lme_run_generation.py.
 ```bash
-python evals/lme_run_generation.py \
-    --in_file <retrieval_log_file> \
+python evals/run_generation.py \
+    --in_file results/graph_lme/graph_retrieval_results-...json \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
-    --cot true \
-    --out_dir <output_directory>
+    --out_dir <输出目录>
 
-python evals/lme_compute_qa.py gpt-4o <generation_output_file> data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json
+python data_preprocessing/lme_trans_graph_retrieval.py 
+
+python evals/lme_compute_qa.py gpt-4o <生成输出文件> data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json
 ```
 
 ---

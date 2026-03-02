@@ -376,7 +376,8 @@ def main(args):
         'In2Training/FILM-7B': 32000,
     }
     model_max_length = model2maxlength[args.model_name]
-    if 'gpt-4' in args.model_name.lower()  or 'gpt-3.5' in args.model_name.lower():
+    # if 'gpt-4' in args.model_name.lower()  or 'gpt-3.5' in args.model_name.lower():
+    if 1:
         tokenizer = tiktoken.get_encoding('o200k_base')
         tokenizer_backend = 'openai'
     else:

@@ -166,12 +166,13 @@ python data_preprocessing/lme_extract_userfact.py
 python evals/lme_compute_recall.py \
     --in_file <检索日志文件> \
     --oracle_file data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json \
-    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json
+    --haystack_file data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json \
+    --out_file <out_file>
 ```
 
 ##### 3. 生成答案（可选）
 ```bash
-python lme_run_generation.py \
+python evals/lme_run_generation.py \
     --in_file <检索日志文件> \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
@@ -205,9 +206,8 @@ Graph 检索由两步构成：首先构建图，然后运行图检索脚本。�
 # 运行图检索
 ./scripts/graph_lme_run_retrieval.sh \
   --embedding contriever \
-  --graphrag-mode entity,chunk,one-hot-expand \
-  --out_dir results/graph_lme/ \
-  --top_k 10
+  --graphrag-mode entity,chunk \
+  --out_dir results/graph_lme/ 
 ```
 
 ##### 2. 计算召回率指标
@@ -220,13 +220,15 @@ python evals/lme_compute_recall.py \
 ```
 
 ##### 3. 生成答案与评估 QA 性能（可选）
-使用生成（QA）评估时，若输入是 graph 检索得到的 `graph_retrieval_results-*.json`，可以将其传给 `lme_run_generation.py`，生成流程与 flat 完全相同。
+使用生成（QA）评估时，若输入是 graph 检索得到的 `graph_retrieval_results-*.json`，需要将其使用`data_preprocessing/lme_trans_graph_retrieval.py`转换格式，然后传给 `lme_run_generation.py`。
 ```bash
-python lme_run_generation.py \
+python evals/run_generation.py \
     --in_file results/graph_lme/graph_retrieval_results-...json \
     --model_name meta-llama/Meta-Llama-3.1-8B-Instruct \
     --topk_context 5 \
     --out_dir <输出目录>
+
+python data_preprocessing/lme_trans_graph_retrieval.py 
 
 python evals/lme_compute_qa.py gpt-4o <生成输出文件> data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json
 ```

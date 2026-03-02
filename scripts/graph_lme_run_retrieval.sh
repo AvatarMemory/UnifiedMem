@@ -9,12 +9,14 @@ REPO_ROOT="$(cd "$script_dir/.." && pwd)"
 
 # Defaults
 DATA_DIR="${DATA_DIR:-${REPO_ROOT}/data}"
-OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_m-${LLM_MODEL:-gpt-4o-mini}}"
+# OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_m-${LLM_MODEL:-gpt-4o-mini}}"
+OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_s-${LLM_MODEL:-llama}}"
 IN_FILE="${IN_FILE:-${DATA_DIR}/longmemeval_s_cleaned.json}"
 # Default embedding: prefer environment `EMBEDDING` if set, else `EMBEDDING_MODEL`, else 'auto'
-EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-auto}}"
-GRAPHRAG_MODE="${GRAPHRAG_MODE:-entity,chunk,one-hot-expand}"
-ONLY_NEED_CONTEXT="${ONLY_NEED_CONTEXT:-false}"
+EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-contriever}}"
+# GRAPHRAG_MODE="${GRAPHRAG_MODE:-entity,chunk,one-hot-expand}"
+GRAPHRAG_MODE="${GRAPHRAG_MODE:-entity,chunk}"
+ONLY_NEED_CONTEXT="${ONLY_NEED_CONTEXT:-true}"
 
 show_help() {
   cat <<EOF
