@@ -98,7 +98,7 @@ if __name__ == '__main__':
     qid2qtype = {entry['question_id']: entry['question_type'] for entry in references}
     qtypes = set(list(qid2qtype.values()))
     qtype2acc = {t: [] for t in qtypes}
-    # assert len(hypotheses) == 500
+    assert len(hypotheses) == 500
 
     with open(result_file, 'w') as out_f:
         logs = []

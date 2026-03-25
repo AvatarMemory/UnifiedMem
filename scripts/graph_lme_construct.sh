@@ -10,7 +10,7 @@ REPO_ROOT="$(cd "$script_dir/.." && pwd)"
 # Defaults
 DATA_DIR="${DATA_DIR:-${REPO_ROOT}/data}"
 OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_s-${LLM_MODEL:-llama}}"
-IN_FILE="${IN_FILE:-${DATA_DIR}/longmemeval_s_cleaned.json}"
+IN_FILE="${IN_FILE:-${DATA_DIR}/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json}"
 # Default embedding: prefer environment `EMBEDDING` if set, else `EMBEDDING_MODEL`, else 'auto'
 # EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-text-embedding-3-small}}"
 EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-contriever}}"
