@@ -20,6 +20,11 @@
 </div>
 
 ---
+## 🎉 News
+
+- **2026.04.06**  Our [**UnifiedMem**](https://arxiv.org/abs/2601.01280v3) is accepted by ACL 2026 Main Conference!
+
+---
 ## Table of Contents
 
 - [Table of Contents](#table-of-contents)
