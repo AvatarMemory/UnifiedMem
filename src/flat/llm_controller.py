@@ -15,6 +15,8 @@ from transformers import AutoModel, AutoTokenizer
 from nltk.tokenize import word_tokenize
 import pickle
 
+from src import config as cfg
+
 
 class BaseLLMController(ABC):
     @abstractmethod
@@ -30,10 +32,10 @@ class OpenAIController(BaseLLMController):
             self.use_json_schema = use_json_schema
             self.max_retries = max_retries
             if api_key is None or api_key == 'None':
-                api_key = os.getenv('OPENAI_API_KEY')
+                api_key = cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None))
             if api_key is None:
-                raise ValueError("OpenAI API key not found. Set OPENAI_API_KEY environment variable.")
-            base_url = None if base_url is None or base_url == 'None' else base_url
+                raise ValueError("OpenAI API key not found. Set LLM_API_KEY or OPENAI_API_KEY in the project environment.")
+            base_url = cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)) if base_url is None or base_url == 'None' else base_url
             self.client = OpenAI(api_key=api_key, base_url=base_url)
         except ImportError:
             raise ImportError("OpenAI package not found. Install it with: pip install openai")

@@ -9,44 +9,67 @@ set -e  # Exit on error
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$script_dir/.." && pwd)"
 
+get_project_env() {
+    local key="$1"
+    local default_value="$2"
+    python - "$key" "$default_value" "$REPO_ROOT" <<'PY'
+import sys
+
+key = sys.argv[1]
+default = sys.argv[2]
+repo_root = sys.argv[3]
+
+sys.path.insert(0, repo_root)
+from src import config as cfg
+
+value = cfg.getenv(key, default)
+print("" if value is None else value)
+PY
+}
+
 # Data paths (default to repo-root `data/HaluMem`)
 DATA_DIR="${DATA_DIR:-${REPO_ROOT}/data/HaluMem}"
 OUT_DIR="${OUT_DIR:-${REPO_ROOT}/checkpoints/HaluMem_structure}"
 # Default cache directory (relative to repo root) unless overridden by env var
-CACHE_DIR="${CACHE_DIR:-${REPO_ROOT}/data/cache}"
+CACHE_DIR="${CACHE_DIR:-$(get_project_env CACHE_DIR "${REPO_ROOT}/data/cache")}"
 
 # Model configuration
-EMBEDDING_MODEL="${EMBEDDING_MODEL:-contriever}"  # stella, contriever, gte, all-MiniLM-L6-v2
-LLM_MODEL="${LLM_MODEL:-meta-llama/Meta-Llama-3.1-8B-Instruct}"
-LLM_BACKEND="${LLM_BACKEND:-openai}"
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-$(get_project_env EMBEDDING_MODEL "contriever")}"  # stella, contriever, gte, all-MiniLM-L6-v2
+LLM_MODEL="${LLM_MODEL:-$(get_project_env LLM_MODEL "gpt-4o-mini")}"
+LLM_BACKEND="${LLM_BACKEND:-$(get_project_env LLM_BACKEND "openai")}"
+BASE_URL="${BASE_URL:-$(get_project_env LLM_BASE_URL "$(get_project_env OPENAI_BASE_URL "")")}"
+API_KEY="${API_KEY:-$(get_project_env LLM_API_KEY "$(get_project_env OPENAI_API_KEY "")")}"
+QA_LLM="${QA_LLM:-$(get_project_env QA_LLM "")}"
+QA_API_BASE="${QA_API_BASE:-$(get_project_env QA_API_BASE "")}"
+QA_API_KEY="${QA_API_KEY:-$(get_project_env QA_API_KEY "")}"
 
 # Retrieval configuration
-RETRIEVE_METHOD="${RETRIEVE_METHOD:-separate}"   # merge, merge_raw, or separate
-QA_RETRIEVE_METHOD="${QA_RETRIEVE_METHOD:-flatten}"  # flatten or default
+RETRIEVE_METHOD="${RETRIEVE_METHOD:-$(get_project_env RETRIEVE_METHOD "separate")}"   # merge, merge_raw, or separate
+QA_RETRIEVE_METHOD="${QA_RETRIEVE_METHOD:-$(get_project_env QA_RETRIEVE_METHOD "flatten")}"  # flatten or default
 
-TOP_K="${TOP_K:-20}"
+TOP_K="${TOP_K:-$(get_project_env TOP_K "20")}"
 
 # Version identifier
-VERSION="${VERSION:-tmp}"
+VERSION="${VERSION:-$(get_project_env VERSION "tmp")}"
 
 # Resume from checkpoint
-RESUME="${RESUME:-true}"
+RESUME="${RESUME:-$(get_project_env RESUME "true")}"
 
 # Skip QA generation (only run memory extraction and retrieval)
-SKIP_QA="${SKIP_QA:-false}"
+SKIP_QA="${SKIP_QA:-$(get_project_env SKIP_QA "false")}"
 
-ENABLE_UPDATE="${ENABLE_UPDATE:-false}"
+ENABLE_UPDATE="${ENABLE_UPDATE:-$(get_project_env ENABLE_UPDATE "false")}"
 
 # Keep original note after update operation
-KEEP_UPDATE_NOTE="${KEEP_UPDATE_NOTE:-true}"
+KEEP_UPDATE_NOTE="${KEEP_UPDATE_NOTE:-$(get_project_env KEEP_UPDATE_NOTE "true")}"
 
 # Use cached metadata
-USE_METADATA_CACHE="${USE_METADATA_CACHE:-true}"
+USE_METADATA_CACHE="${USE_METADATA_CACHE:-$(get_project_env USE_METADATA_CACHE "true")}"
 
 # Dataset version: medium or long
-DATASET="${DATASET:-medium}"
+DATASET="${DATASET:-$(get_project_env DATASET "medium")}"
 
-NUM_WORKERS=8
+NUM_WORKERS="${NUM_WORKERS:-$(get_project_env NUM_WORKERS "8")}"
 
 # ===== Parse arguments =====
 while [[ $# -gt 0 ]]; do
@@ -115,6 +138,18 @@ while [[ $# -gt 0 ]]; do
             API_KEY="$2"
             shift 2
             ;;
+        --qa-llm)
+            QA_LLM="$2"
+            shift 2
+            ;;
+        --qa-api-base)
+            QA_API_BASE="$2"
+            shift 2
+            ;;
+        --qa-api-key)
+            QA_API_KEY="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -136,6 +171,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-metadata-cache        Don't use cached metadata"
             echo "  --base-url URL             Base URL for LLM API (for vLLM)"
             echo "  --api-key KEY              API key for LLM"
+            echo "  --qa-llm MODEL             QA model (defaults to QA_LLM or llm_model)"
+            echo "  --qa-api-base URL          Base URL for QA model API"
+            echo "  --qa-api-key KEY           API key for QA model API"
             echo "  --help                     Show this help message"
             exit 0
             ;;
@@ -227,6 +265,18 @@ fi
 
 if [ -n "$API_KEY" ]; then
     CMD="$CMD --api_key $API_KEY"
+fi
+
+if [ -n "$QA_LLM" ]; then
+    CMD="$CMD --qa_llm $QA_LLM"
+fi
+
+if [ -n "$QA_API_BASE" ]; then
+    CMD="$CMD --qa_api_base $QA_API_BASE"
+fi
+
+if [ -n "$QA_API_KEY" ]; then
+    CMD="$CMD --qa_api_key $QA_API_KEY"
 fi
 
 if [ -n "$NUM_WORKERS" ]; then

@@ -102,6 +102,9 @@ class StructuredMemoryRetriever:
         self.embedding_model = embedding_model
         self.model_config = model_config
         self.llm_model = llm_model
+        self.llm_backend = llm_backend
+        self.api_key = api_key
+        self.base_url = base_url
         self.temperature = temperature
         
         # Initialize the memory system
@@ -136,6 +139,20 @@ class StructuredMemoryRetriever:
             api_key=api_key,
             base_url=base_url
         )
+
+    def _create_llm_client(self) -> OpenAI:
+        """Create an OpenAI-compatible client using the configured endpoint."""
+        client_kwargs = {}
+
+        if self.api_key not in (None, '', 'None'):
+            client_kwargs['api_key'] = self.api_key
+        elif 'gpt' not in self.llm_model.lower():
+            client_kwargs['api_key'] = 'EMPTY'
+
+        if self.base_url not in (None, '', 'None'):
+            client_kwargs['base_url'] = self.base_url
+
+        return OpenAI(**client_kwargs)
     
     def extract_metadata_from_dialogue(
         self,
@@ -223,13 +240,7 @@ class StructuredMemoryRetriever:
 
     def _extract_summ(self, dialogue: List[Dict]) -> str:
         """Extract summary from dialogue using LLM. Adapted from LME's prompts"""
-        if 'gpt' in self.llm_model.lower():
-            client = OpenAI()
-        else:
-            client = OpenAI(
-                api_key="empty",
-                base_url="http://localhost:8001/v1",
-            )
+        client = self._create_llm_client()
         summarization_prompt = "Below is a transcript of a conversation between a human user and an AI assistant. Please summarize the following dialogue as concisely as possible in a short paragraph, extracting the main themes and key information. In your summary, focus more on what the user mentioned or asked for. Dialogue content:\n"
         for turn_entry in dialogue:
             summarization_prompt += f"\n{turn_entry['role']}: {turn_entry['content']}"
@@ -250,13 +261,7 @@ class StructuredMemoryRetriever:
 
     def _extract_key(self, dialogue: List[Dict]) -> List[str]:
         """Extract keyphrases from dialogue using LLM. Copied from LME's batch_expansion_session_keyphrases.py"""
-        if 'gpt' in self.llm_model.lower():
-            client = OpenAI()
-        else:
-            client = OpenAI(
-                api_key="empty",
-                base_url="http://localhost:8001/v1",
-            )
+        client = self._create_llm_client()
         summarization_prompt = "Below is a transcript of a conversation between a human user and an AI assistant. Generate a list of keyphrases for the session. Separate each keyphrase with a semicolon. Dialogue content:\n"
         for turn_entry in dialogue:
             summarization_prompt += f"\n{turn_entry['role']}：{turn_entry['content']}"
@@ -307,8 +312,8 @@ Example of valid output:
             dialogue=dialogue_text.strip(),
             timestamp=timestamp
         )
-        client = OpenAI() if 'gpt' in self.llm_model.lower() else OpenAI(api_key="empty", base_url="http://localhost:8001/v1") 
-        
+        client = self._create_llm_client()
+
         response = client.chat.completions.create(messages=[{"role": "user", "content": prompt}],
                                          model=self.llm_model,
                                         #  max_tokens=1000,

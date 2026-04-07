@@ -22,20 +22,40 @@ if __package__ is None and __name__ == '__main__':
         sys.path.insert(0, repo_root)
 
 from src import config as cfg
+from evals.lme_generation_utils import build_expansion_map, default_lme_data_file, load_generation_input
 
 import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
+def resolve_generation_client_config(model_name=None, api_base=None, api_key=None):
+    resolved_model = model_name or cfg.getenv('QA_LLM', cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'))
+    resolved_base = api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
+
+    if api_key not in (None, '', 'None'):
+        resolved_key = api_key
+    else:
+        resolved_key = cfg.getenv('QA_API_KEY', cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)))
+        if resolved_key in (None, '', 'None') and 'gpt' not in resolved_model.lower():
+            resolved_key = 'EMPTY'
+
+    return resolved_model, resolved_base, resolved_key
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--in_file', type=str)
-    parser.add_argument('--out_dir', type=str)
+    parser.add_argument('--out_dir', type=str, default='checkpoints/LongMemEval/generation_logs')
     parser.add_argument('--out_file_suffix', type=str, default="")
-        
-    parser.add_argument('--model_name', type=str, default=cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'))
+    parser.add_argument('--data_file', type=str, default=default_lme_data_file(),
+                        help='Reference LongMemEval question file used when --in_file is a graph retrieval JSON mapping.')
+
+    default_model_name, default_api_base, default_api_key = resolve_generation_client_config()
+
+    parser.add_argument('--model_name', type=str, default=default_model_name)
     parser.add_argument('--model_alias', type=str)
-    parser.add_argument('--openai_base_url', type=str, default=cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1'))
-    parser.add_argument('--openai_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', 'EMPTY')))
+    parser.add_argument('--openai_base_url', type=str, default=default_api_base)
+    parser.add_argument('--openai_key', type=str, default=default_api_key)
     parser.add_argument('--openai_organization', type=str, default=cfg.getenv('OPENAI_ORGANIZATION', None))
 
     parser.add_argument('--retriever_type', type=str, default='flat-session')
@@ -44,6 +64,8 @@ def parse_args():
     parser.add_argument('--useronly', type=str, default='false', choices=['true', 'false'])
     parser.add_argument('--cot', type=str, default='true', choices=['true', 'false'])
     parser.add_argument('--con', type=str, required=False, choices=['true', 'false'], default='false')
+    parser.add_argument('--use_raw_session', action='store_true', default=False,
+                        help='When merging expansions, also include the original raw session in the prompt.')
 
     # user fact expansion
     parser.add_argument('--merge_key_expansion_into_value', type=str, choices=['merge', 'replace', 'none'], default='none')     # merge key expansion into value
@@ -99,6 +121,7 @@ def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, his
     #         corpusid2retvalue[ret_result_entry['corpus_id']] = ret_result_entry['text']
     # except:
     #     pass
+    corpusid2retvalue = build_expansion_map(entry.get('retrieval_results', {}).get('ranked_items', []))
     
     retrieved_chunks = []
     # get chunks in the original order
@@ -201,10 +224,21 @@ def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, his
                     retrieved_chunks.append(("unknown", ret_result_entry['content']))
                 # retrieved_chunks.append((corpusid2date[ret_result_entry['corpus_id'].replace('noans_', 'answer_')], ret_result_entry['text']))
             elif merge_key_expansion_into_value == 'merge':
+                target_corpus_id = ret_result_entry['corpus_id'].replace('noans_', 'answer_')
+                expansions = corpusid2retvalue.get(target_corpus_id)
+                if expansions is None:
+                    if ret_result_entry['res_type'] == 'chunk':
+                        expansions = {}
+                    else:
+                        fallback_content = ret_result_entry.get('content', ret_result_entry.get('text', ''))
+                        expansions = {'Relevant Info': fallback_content} if fallback_content else {}
+
+                if target_corpus_id not in corpusid2entry:
+                    continue
                 if useronly:
-                    retrieved_chunks.append((corpusid2date[ret_result_entry['corpus_id'].replace('noans_', 'answer_')], ret_result_entry['text'], [x for x in corpusid2entry[ret_result_entry['corpus_id'].replace('noans_', 'answer_')] if x['role'] == 'user']))
+                    retrieved_chunks.append((corpusid2date[target_corpus_id], expansions, [x for x in corpusid2entry[target_corpus_id] if x['role'] == 'user']))
                 else:
-                    retrieved_chunks.append((corpusid2date[ret_result_entry['corpus_id'].replace('noans_', 'answer_')], ret_result_entry['text'], corpusid2entry[ret_result_entry['corpus_id'].replace('noans_', 'answer_')]))
+                    retrieved_chunks.append((corpusid2date[target_corpus_id], expansions, corpusid2entry[target_corpus_id]))
             else:
                 raise NotImplementedError
 
@@ -281,7 +315,11 @@ def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, his
 
         if history_format == 'json':
             if merge_key_expansion_into_value == 'merge':
-                sess_string = '\n' + json.dumps({'session_summary_facts': chunk_expansion_entry, 'original_session': chunk_entry})
+                if args.use_raw_session or not chunk_expansion_entry:
+                    payload = {**chunk_expansion_entry, 'original_session': chunk_entry}
+                else:
+                    payload = chunk_expansion_entry
+                sess_string = '\n' + json.dumps(payload, indent=2)
             else:
                 sess_string = '\n' + json.dumps(chunk_entry)
         elif history_format == 'nl':
@@ -369,15 +407,19 @@ def main(args):
     # setup
     if args.openai_organization:
         openai.organization = args.openai_organization
+
+    args.model_name, args.openai_base_url, args.openai_key = resolve_generation_client_config(
+        model_name=args.model_name,
+        api_base=args.openai_base_url,
+        api_key=args.openai_key,
+    )
+
     client = OpenAI(
         api_key=args.openai_key,
         base_url=args.openai_base_url,
     )
 
-    try:
-        in_data = json.load(open(args.in_file))
-    except:
-        in_data = [json.loads(line) for line in open(args.in_file).readlines()]
+    in_data = load_generation_input(args.in_file, args.data_file)
 
     in_file_tmp = args.in_file.split('/')[-1]
     if args.merge_key_expansion_into_value is not None and args.merge_key_expansion_into_value != 'none':

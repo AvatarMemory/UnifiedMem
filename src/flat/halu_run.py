@@ -55,36 +55,36 @@ def parse_args():
     parser.add_argument('--embedding_model', type=str, default=cfg.getenv('EMBEDDING_MODEL', 'contriever'),
                         choices=list(MODEL_CONFIG.keys()),
                         help='Embedding model for retrieval (overridable via env EMBEDDING_MODEL)')
-    parser.add_argument('--retrieve_method', type=str, default='merge',
+    parser.add_argument('--retrieve_method', type=str, default=cfg.getenv('RETRIEVE_METHOD', 'merge'),
                         choices=['merge', 'separate', 'merge_raw'],
                         help='How to combine memory components for retrieval')
-    parser.add_argument('--use_raw_session_as_key', action='store_true', default=False,
+    parser.add_argument('--use_raw_session_as_key', action='store_true', default=cfg.get_bool('USE_RAW_SESSION_AS_KEY', False),
                         help='Include the raw session for memory operations and final retrieval for QA')
-    parser.add_argument('--llm_model', type=str, default=cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'),
+    parser.add_argument('--llm_model', type=str, default=cfg.getenv('LLM_MODEL', 'gpt-4o-mini'),
                         help='LLM model for memory operations and QA (overridable via env LLM_MODEL)')
     parser.add_argument('--llm_backend', type=str, default=cfg.getenv('LLM_BACKEND', 'openai'), choices=['openai'], help='LLM backend')
-    parser.add_argument('--api_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', 'EMPTY')),
+    parser.add_argument('--api_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)),
                         help='API key for LLM (can be set via env LLM_API_KEY or OPENAI_API_KEY)')
-    parser.add_argument('--base_url', type=str, default=cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1'),
+    parser.add_argument('--base_url', type=str, default=cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)),
                         help='Base URL for LLM API (for vLLM)')
     parser.add_argument('--temperature', type=float, default=cfg.get_float('LLM_TEMPERATURE', 0.0), help='Temperature for LLM generation')
     
     # Retrieval configuration
-    parser.add_argument('--top_k', type=int, default=20,
+    parser.add_argument('--top_k', type=int, default=cfg.get_int('TOP_K', 20),
                         help='Number of memories/points to retrieve for QA')
-    parser.add_argument('--keep_update_note', action='store_true', default=False,
+    parser.add_argument('--keep_update_note', action='store_true', default=cfg.get_bool('KEEP_UPDATE_NOTE', False),
                         help='Keep original note after update operation')
-    parser.add_argument('--enable_link', action='store_true', default=False,
+    parser.add_argument('--enable_link', action='store_true', default=cfg.get_bool('ENABLE_LINK', False),
                         help='Enable linking related memories during memory operations')
-    parser.add_argument('--use_neighbour_memories', action='store_true', default=False,
+    parser.add_argument('--use_neighbour_memories', action='store_true', default=cfg.get_bool('USE_NEIGHBOUR_MEMORIES', False),
                         help='Use neighbouring memories for retrieval and operations')
-    parser.add_argument('--enable_update', action='store_true', default=False,
+    parser.add_argument('--enable_update', action='store_true', default=cfg.get_bool('ENABLE_UPDATE', False),
                         help='Enable memory update operations (create/update/skip)')
-    parser.add_argument('--qa_retrieve_method', type=str, default='flatten', choices=['flatten', 'default'], 
+    parser.add_argument('--qa_retrieve_method', type=str, default=cfg.getenv('QA_RETRIEVE_METHOD', 'flatten'), choices=['flatten', 'default'], 
                         help='QA retrieval method, flatten all points or default to retrieve_method')
     
     # Flattened retrieval configuration
-    parser.add_argument('--include_point_type', action='store_true', default=False,
+    parser.add_argument('--include_point_type', action='store_true', default=cfg.get_bool('INCLUDE_POINT_TYPE', False),
                         help='Include point type (summary/keyword/fact) in context')
     
     # QA configuration
@@ -92,15 +92,17 @@ def parse_args():
                         help='LLM model for QA (defaults to llm_model)')
     parser.add_argument('--qa_api_base', type=str, default=cfg.getenv('QA_API_BASE', None),
                         help='API base URL for QA LLM')
+    parser.add_argument('--qa_api_key', type=str, default=cfg.getenv('QA_API_KEY', None),
+                        help='API key for QA LLM')
     parser.add_argument('--skip_qa', action='store_true',
                         help='Skip QA generation, only run memory extraction and retrieval')
     
     # Processing configuration
-    parser.add_argument('--version', type=str, default='default',
+    parser.add_argument('--version', type=str, default=cfg.getenv('VERSION', 'default'),
                         help='Version identifier for output files')
-    parser.add_argument('--resume', action='store_true',
+    parser.add_argument('--resume', action='store_true', default=cfg.get_bool('RESUME', False),
                         help='Resume from existing progress')
-    parser.add_argument('--use_metadata_cache', action='store_true',
+    parser.add_argument('--use_metadata_cache', action='store_true', default=cfg.get_bool('USE_METADATA_CACHE', False),
                         help='Use cached extracted metadata if available')
     parser.add_argument('--metadata_cache_dir', type=str, default=None,
                         help='Directory for metadata extraction cache')
@@ -108,7 +110,7 @@ def parse_args():
                         help='Device for embedding model (auto-detect if not specified)')
     
     # Multiprocessing configuration
-    parser.add_argument('--num_workers', type=int, default=1,
+    parser.add_argument('--num_workers', type=int, default=cfg.get_int('NUM_WORKERS', 1),
                         help='Number of parallel workers for processing users')
     parser.add_argument('--gpu_ids', type=str, default=None,
                         help='Comma-separated list of GPU IDs to use (e.g., "0,1,2,3")')
@@ -159,13 +161,15 @@ class StructuredHaluMemEvaluator:
             return
         
         qa_llm = self.args.qa_llm or self.args.llm_model
+        qa_api_key = self.args.qa_api_key or self.args.api_key
+        qa_api_base = self.args.qa_api_base or self.args.base_url
         
         if 'gpt' in qa_llm.lower():
-            api_key = self.args.api_key or os.getenv('OPENAI_API_KEY')
-            api_base = None
+            api_key = qa_api_key or cfg.getenv('QA_API_KEY', cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)))
+            api_base = qa_api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)))
         else:
-            api_key = 'EMPTY'
-            api_base = self.args.qa_api_base or self.args.base_url or 'http://localhost:8001/v1'
+            api_key = qa_api_key or cfg.getenv('QA_API_KEY', None) or 'EMPTY'
+            api_base = qa_api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
         
         if api_base:
             self.qa_client = OpenAI(api_key=api_key, base_url=api_base)
@@ -186,8 +190,8 @@ class StructuredHaluMemEvaluator:
             retrieve_method=self.args.retrieve_method,
             llm_model=self.args.llm_model,
             llm_backend=self.args.llm_backend,
-            api_key=self.args.api_key or os.getenv('OPENAI_API_KEY'),
-            base_url=None if 'gpt' in self.args.llm_model.lower() else self.args.base_url,
+            api_key=self.args.api_key or cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)),
+            base_url=self.args.base_url,
             temperature=self.args.temperature,
             device=device,
             cache_dir=self.args.cache_dir,
@@ -752,7 +756,8 @@ def main():
     args = parse_args()
 
     if args.use_neighbour_memories: assert args.enable_link, "Must enable --enable_link when using --use_neighbour_memories"
-    args.api_key = os.getenv('OPENAI_API_KEY') if 'gpt' in args.llm_model.lower() else args.api_key
+    if 'gpt' in args.llm_model.lower():
+        args.api_key = args.api_key or cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None))
     
     # Setup paths
     frame = f"structure_{args.embedding_model}_{MEMORY_EXTRACTION_LLM.get(args.llm_model, args.llm_model)}"

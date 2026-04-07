@@ -3,59 +3,34 @@ import json
 import os
 import sys
 
-PROJECT_ROOT = os.path.expanduser("~/UnifiedMem")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+from evals.lme_generation_utils import convert_graph_retrieval_map_to_entries, default_lme_data_file
+
+
 def main():
-    parser = argparse.ArgumentParser(description='Merge retrieval results into question data.')
-    parser.add_argument('--in_file', help='Input retrieval results JSON file')
+    parser = argparse.ArgumentParser(description='Merge graph retrieval results into LongMemEval question data.')
+    parser.add_argument('--in_file', required=True, help='Input graph retrieval JSON file')
     parser.add_argument('--out_file', help='Output JSONL file (default: based on in_file with "_translated.jsonl" suffix)')
-    parser.add_argument('--data_file',default=f"{PROJECT_ROOT}/data/longmemeval_s_cleaned.json")
+    parser.add_argument('--data_file', default=default_lme_data_file(),
+                        help='LongMemEval question file used to merge graph retrieval results')
     args = parser.parse_args()
 
-    # 默认输出文件名生成规则
     if args.out_file is None:
-        base, ext = os.path.splitext(args.in_file)
+        base, _ = os.path.splitext(args.in_file)
         args.out_file = f"{base}_translated.jsonl"
 
-    graph_retrieval_results_file = args.in_file
-    output_file = args.out_file
-    input_file = args.data_file
+    with open(args.in_file, 'r', encoding='utf-8') as f:
+        graph_data = json.load(f)
 
-    # 读取检索结果
-    qid2retrieval_results = {}
-    with open(graph_retrieval_results_file, 'r') as f:
-        data = json.load(f)
-        for qid, retrieval_results in data.items():
-            qid2retrieval_results[qid] = retrieval_results
+    merged_entries = convert_graph_retrieval_map_to_entries(graph_data, args.data_file)
 
-    # 读取问题数据并合并检索结果
-    with open(input_file, 'r') as f:
-        data = json.load(f)
-        for item in data:
-            if item['question_id'] in qid2retrieval_results:
-                graph_retrieval_results = qid2retrieval_results[item['question_id']]
-                ranked_items = []
-                for graph_retrieval_result in graph_retrieval_results:
-                    if graph_retrieval_result['res_type'] == 'chunk':
-                        ranked_items.append({
-                            "res_type": "chunk",
-                            "corpus_id": graph_retrieval_result['chunk_id'],
-                            "text": graph_retrieval_result['content']
-                        })
-                    else:
-                        ranked_items.append(graph_retrieval_result)
-                retrieval_results = {
-                    "query": item['question'],
-                    "ranked_items": ranked_items
-                }
-                item["retrieval_results"] = retrieval_results
+    with open(args.out_file, 'w', encoding='utf-8') as f:
+        for item in merged_entries:
+            f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
-    # 写入输出文件（JSONL格式）
-    with open(output_file, 'w') as f:
-        for item in data:
-            f.write(json.dumps(item) + '\n')
 
 if __name__ == '__main__':
     main()
