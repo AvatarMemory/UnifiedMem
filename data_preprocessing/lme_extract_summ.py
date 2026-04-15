@@ -15,6 +15,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(REPO_ROOT / '.env', override=False)
 load_dotenv(Path(__file__).parent / '.env', override=True)
 
+import sys
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src import config as cfg
+
 # Config
 NUM_WORKERS = int(os.getenv('NUM_WORKERS', '64'))
 SAVE_EVERY = int(os.getenv('SAVE_EVERY', '256'))
@@ -22,12 +28,11 @@ SAVE_EVERY = int(os.getenv('SAVE_EVERY', '256'))
 # Summarization hyperparameters
 SUMMARY_MAX_TOKENS = int(os.getenv('SUMMARY_MAX_TOKENS', '500'))
 SUMMARY_TEMPERATURE = float(os.getenv('SUMMARY_TEMPERATURE', '0.0'))
-LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://localhost:8001/v1')
 
 # OpenAI credentials
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', LLM_BASE_URL)
-MODEL_NAME = os.getenv('LLM_MODEL', 'gpt-4o-mini')
+OPENAI_API_KEY = cfg.get_stage_api_key('index', '')
+OPENAI_BASE_URL = cfg.get_stage_base_url('index', 'http://localhost:8001/v1')
+MODEL_NAME = cfg.get_stage_model('index', 'gpt-4o-mini')
 
 @backoff.on_exception(backoff.constant, (openai.RateLimitError), 
                       interval=5)
@@ -74,9 +79,9 @@ if __name__ == '__main__':
     # model selection: default from env or fallback
     model_name = MODEL_NAME
     
-    in_file = 'data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json'
+    in_file = os.getenv('LME_IN_FILE', 'data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json')
     # in_file = 'data/longmemeval_s_cleaned.json'
-    cache_folder = 'data/longmemeval-cleaned/expansions-gpt4o_mini_temp1'
+    cache_folder = os.getenv('LME_CACHE_FOLDER', 'data/longmemeval-cleaned/expansions-gpt4o_mini_temp1')
     os.makedirs(cache_folder, exist_ok=True)
     cache_file = f'{cache_folder}/session-summ_.json'
 

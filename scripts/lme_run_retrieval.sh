@@ -5,9 +5,26 @@ retriever=${2:-"flat-contriever"}
 granularity=${3:-"session"}
 index_expansion=${4:-"session-userfact,session-keyphrase,session-summ"}  # none, session-summ, session-keyphrase, session-userfact
 index_expansion_join_mode=${5:-"merge"}   # separate, merge, merge_raw, none
-index_expansion_cache=${6:-"./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-userfact.json,./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-keyphrase_.json,./data/longmemeval-cleaned/expansions-gpt4o_mini_temp1/session-summ_.json"}  # comma-separated list of cache files for each expansion method
 aux_model_alias=${7:-"llama-3.1-8b-instruct-ICL"}
 outfile_prefix=${8:-"tmp"}
+
+sanitize_for_path() {
+    case "$1" in
+        gpt-4o-mini)
+            echo "gpt4o_mini"
+            ;;
+        gpt-5-mini)
+            echo "gpt5_mini"
+            ;;
+        *)
+            echo "$1" | tr '/.-' '___'
+            ;;
+    esac
+}
+
+default_expansion_cache_dir="./data/longmemeval-cleaned/expansions-$(sanitize_for_path "$aux_model_alias")_temp1"
+index_expansion_cache=${6:-"${default_expansion_cache_dir}/session-userfact.json,${default_expansion_cache_dir}/session-keyphrase_.json,${default_expansion_cache_dir}/session-summ_.json"}  # comma-separated list of cache files for each expansion method
+
 declare -A model_zoo
 model_zoo["none"]="none"
 model_zoo["llama-3.1-8b-instruct"]="meta-llama/Meta-Llama-3.1-8B-Instruct"
@@ -15,7 +32,9 @@ model_zoo["llama-3.1-8b-instruct-ICL"]="meta-llama/Meta-Llama-3.1-8B-Instruct"
 model_zoo["llama-3.1-70b-instruct"]="meta-llama/Meta-Llama-3.1-70B-Instruct"
 model_zoo["gpt-4o-mini"]="gpt-4o-mini"
 model_zoo["gpt-5-mini"]="gpt-5-mini"
-aux_model=${model_zoo["$aux_model_alias"]}
+model_zoo["qwen3-8b"]="qwen3-8b"
+model_zoo["qwen3_8b"]="qwen3-8b"
+aux_model=${model_zoo["$aux_model_alias"]:-"$aux_model_alias"}
 
 ## Determine `home_dir` as the repository root (parent of this `scripts/` dir).
 ## This keeps model cache inside the project by default.

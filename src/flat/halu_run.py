@@ -60,12 +60,12 @@ def parse_args():
                         help='How to combine memory components for retrieval')
     parser.add_argument('--use_raw_session_as_key', action='store_true', default=cfg.get_bool('USE_RAW_SESSION_AS_KEY', False),
                         help='Include the raw session for memory operations and final retrieval for QA')
-    parser.add_argument('--llm_model', type=str, default=cfg.getenv('LLM_MODEL', 'gpt-4o-mini'),
+    parser.add_argument('--llm_model', type=str, default=cfg.get_stage_model('index', 'gpt-4o-mini'),
                         help='LLM model for memory operations and QA (overridable via env LLM_MODEL)')
     parser.add_argument('--llm_backend', type=str, default=cfg.getenv('LLM_BACKEND', 'openai'), choices=['openai'], help='LLM backend')
-    parser.add_argument('--api_key', type=str, default=cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)),
+    parser.add_argument('--api_key', type=str, default=cfg.get_stage_api_key('index', None),
                         help='API key for LLM (can be set via env LLM_API_KEY or OPENAI_API_KEY)')
-    parser.add_argument('--base_url', type=str, default=cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)),
+    parser.add_argument('--base_url', type=str, default=cfg.get_stage_base_url('index', None),
                         help='Base URL for LLM API (for vLLM)')
     parser.add_argument('--temperature', type=float, default=cfg.get_float('LLM_TEMPERATURE', 0.0), help='Temperature for LLM generation')
     
@@ -88,12 +88,12 @@ def parse_args():
                         help='Include point type (summary/keyword/fact) in context')
     
     # QA configuration
-    parser.add_argument('--qa_llm', type=str, default=cfg.getenv('QA_LLM', None),
-                        help='LLM model for QA (defaults to llm_model)')
-    parser.add_argument('--qa_api_base', type=str, default=cfg.getenv('QA_API_BASE', None),
-                        help='API base URL for QA LLM')
-    parser.add_argument('--qa_api_key', type=str, default=cfg.getenv('QA_API_KEY', None),
-                        help='API key for QA LLM')
+    parser.add_argument('--qa_llm', type=str, default=cfg.get_stage_model('qa', None),
+                        help='LLM model for QA (defaults to QA_LLM_MODEL/LLM_MODEL, then llm_model)')
+    parser.add_argument('--qa_api_base', type=str, default=cfg.get_stage_base_url('qa', None),
+                        help='API base URL for QA LLM (defaults to QA_BASE_URL/OPENAI_BASE_URL)')
+    parser.add_argument('--qa_api_key', type=str, default=cfg.get_stage_api_key('qa', None),
+                        help='API key for QA LLM (defaults to QA_API_KEY/OPENAI_API_KEY)')
     parser.add_argument('--skip_qa', action='store_true',
                         help='Skip QA generation, only run memory extraction and retrieval')
     
@@ -165,11 +165,11 @@ class StructuredHaluMemEvaluator:
         qa_api_base = self.args.qa_api_base or self.args.base_url
         
         if 'gpt' in qa_llm.lower():
-            api_key = qa_api_key or cfg.getenv('QA_API_KEY', cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)))
-            api_base = qa_api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)))
+            api_key = qa_api_key or cfg.get_stage_api_key('qa', None)
+            api_base = qa_api_base or cfg.get_stage_base_url('qa', None)
         else:
-            api_key = qa_api_key or cfg.getenv('QA_API_KEY', None) or 'EMPTY'
-            api_base = qa_api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
+            api_key = qa_api_key or cfg.get_stage_api_key('qa', None) or 'EMPTY'
+            api_base = qa_api_base or cfg.get_stage_base_url('qa', 'http://localhost:8001/v1')
         
         if api_base:
             self.qa_client = OpenAI(api_key=api_key, base_url=api_base)
@@ -190,7 +190,7 @@ class StructuredHaluMemEvaluator:
             retrieve_method=self.args.retrieve_method,
             llm_model=self.args.llm_model,
             llm_backend=self.args.llm_backend,
-            api_key=self.args.api_key or cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)),
+            api_key=self.args.api_key or cfg.get_stage_api_key('index', None),
             base_url=self.args.base_url,
             temperature=self.args.temperature,
             device=device,
@@ -757,7 +757,7 @@ def main():
 
     if args.use_neighbour_memories: assert args.enable_link, "Must enable --enable_link when using --use_neighbour_memories"
     if 'gpt' in args.llm_model.lower():
-        args.api_key = args.api_key or cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None))
+        args.api_key = args.api_key or cfg.get_stage_api_key('index', None)
     
     # Setup paths
     frame = f"structure_{args.embedding_model}_{MEMORY_EXTRACTION_LLM.get(args.llm_model, args.llm_model)}"

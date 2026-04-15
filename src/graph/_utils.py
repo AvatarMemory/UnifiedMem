@@ -8,6 +8,7 @@ import numbers
 from dataclasses import dataclass
 from functools import wraps
 from hashlib import md5
+from pathlib import Path
 from typing import Any, Union, Literal
 
 import numpy as np
@@ -15,6 +16,7 @@ import tiktoken
 
 
 from transformers import AutoTokenizer
+from src import config as cfg
 
 logger = logging.getLogger("nano-graphrag")
 logging.getLogger("neo4j").setLevel(logging.ERROR)
@@ -197,6 +199,102 @@ def load_json(file_name):
         return None
     with open(file_name, encoding="utf-8") as f:
         return json.load(f)
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_HALU_DATASET = "HaluMem-Medium.jsonl"
+
+
+def _abs(path: str | os.PathLike[str]) -> str:
+    return str(Path(path).expanduser().resolve())
+
+
+def resolve_halu_dataset_path(
+    in_file: str | None = None,
+    default_basename: str = DEFAULT_HALU_DATASET,
+) -> str:
+    if in_file:
+        candidate = Path(in_file).expanduser()
+        if candidate.is_file():
+            return str(candidate.resolve())
+        if candidate.is_absolute():
+            return str(candidate)
+
+    env_path = cfg.getenv("HALU_DATA_PATH", cfg.getenv("DATA_PATH", None))
+    if env_path:
+        return _abs(env_path)
+
+    basename = Path(in_file).name if in_file and Path(in_file).name else default_basename
+    data_dir = Path(cfg.getenv("DATA_DIR", str(REPO_ROOT / "data"))).expanduser()
+
+    candidates = [
+        data_dir / "HaluMem" / basename,
+        data_dir / basename,
+        REPO_ROOT / "data" / "HaluMem" / basename,
+        REPO_ROOT / "data" / basename,
+        REPO_ROOT / "sample_data" / basename,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return str(candidate.resolve())
+
+    return str((data_dir / "HaluMem" / basename).resolve())
+
+
+def dataset_tag_from_path(dataset_path: str) -> str:
+    name = Path(dataset_path).name.lower()
+    if "medium" in name:
+        return "medium"
+    if "long" in name:
+        return "long"
+    stem = Path(name).stem
+    if stem.startswith("halumem-"):
+        stem = stem[len("halumem-") :]
+    return stem.replace("_", "-")
+
+
+def resolve_halu_graph_root(
+    graph_root: str | None = None,
+    dataset_path: str | None = None,
+    model_tag: str | None = None,
+) -> str:
+    if graph_root:
+        candidate = Path(graph_root).expanduser()
+        return str(candidate.resolve()) if candidate.exists() else str(candidate)
+
+    env_root = cfg.getenv("HALU_GRAPH_ROOT", cfg.getenv("GRAPH_ROOT", None))
+    if env_root:
+        candidate = Path(env_root).expanduser()
+        return str(candidate.resolve()) if candidate.exists() else str(candidate)
+
+    resolved_dataset = resolve_halu_dataset_path(dataset_path)
+    tag = dataset_tag_from_path(resolved_dataset)
+    model_name = model_tag or cfg.get_stage_model("index", "gpt-4o-mini")
+    legacy_root = REPO_ROOT / "data" / f"nc-graph_halu_mem_{tag}-{model_name}"
+    if legacy_root.exists():
+        return str(legacy_root.resolve())
+
+    return str(legacy_root)
+
+
+def ensure_dir(path: str) -> str:
+    Path(path).mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def find_latest_retrieval_file(graph_root: str) -> str | None:
+    root = Path(graph_root)
+    if not root.is_dir():
+        return None
+
+    candidates = sorted(
+        root.glob("graph_retrieval_results*.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    return str(candidates[0].resolve())
 
 
 # it's dirty to type, so it's a good way to have fun

@@ -32,10 +32,10 @@ class OpenAIController(BaseLLMController):
             self.use_json_schema = use_json_schema
             self.max_retries = max_retries
             if api_key is None or api_key == 'None':
-                api_key = cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None))
+                api_key = cfg.get_stage_api_key('index', None)
             if api_key is None:
-                raise ValueError("OpenAI API key not found. Set LLM_API_KEY or OPENAI_API_KEY in the project environment.")
-            base_url = cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', None)) if base_url is None or base_url == 'None' else base_url
+                raise ValueError("OpenAI API key not found. Set INDEX_API_KEY or OPENAI_API_KEY in the project environment.")
+            base_url = cfg.get_stage_base_url('index', None) if base_url is None or base_url == 'None' else base_url
             self.client = OpenAI(api_key=api_key, base_url=base_url)
         except ImportError:
             raise ImportError("OpenAI package not found. Install it with: pip install openai")

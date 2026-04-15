@@ -8,68 +8,51 @@ set -e  # Exit on error
 # Compute repo root and default data/cache paths (make script robust to cwd)
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$script_dir/.." && pwd)"
-
-get_project_env() {
-    local key="$1"
-    local default_value="$2"
-    python - "$key" "$default_value" "$REPO_ROOT" <<'PY'
-import sys
-
-key = sys.argv[1]
-default = sys.argv[2]
-repo_root = sys.argv[3]
-
-sys.path.insert(0, repo_root)
-from src import config as cfg
-
-value = cfg.getenv(key, default)
-print("" if value is None else value)
-PY
-}
+. "$script_dir/_project_env.sh"
 
 # Data paths (default to repo-root `data/HaluMem`)
 DATA_DIR="${DATA_DIR:-${REPO_ROOT}/data/HaluMem}"
 OUT_DIR="${OUT_DIR:-${REPO_ROOT}/checkpoints/HaluMem_structure}"
 # Default cache directory (relative to repo root) unless overridden by env var
-CACHE_DIR="${CACHE_DIR:-$(get_project_env CACHE_DIR "${REPO_ROOT}/data/cache")}"
+CACHE_DIR="${CACHE_DIR:-$(get_project_env CACHE_DIR "${REPO_ROOT}/data/cache" "$REPO_ROOT")}"
 
 # Model configuration
-EMBEDDING_MODEL="${EMBEDDING_MODEL:-$(get_project_env EMBEDDING_MODEL "contriever")}"  # stella, contriever, gte, all-MiniLM-L6-v2
-LLM_MODEL="${LLM_MODEL:-$(get_project_env LLM_MODEL "gpt-4o-mini")}"
-LLM_BACKEND="${LLM_BACKEND:-$(get_project_env LLM_BACKEND "openai")}"
-BASE_URL="${BASE_URL:-$(get_project_env LLM_BASE_URL "$(get_project_env OPENAI_BASE_URL "")")}"
-API_KEY="${API_KEY:-$(get_project_env LLM_API_KEY "$(get_project_env OPENAI_API_KEY "")")}"
-QA_LLM="${QA_LLM:-$(get_project_env QA_LLM "")}"
-QA_API_BASE="${QA_API_BASE:-$(get_project_env QA_API_BASE "")}"
-QA_API_KEY="${QA_API_KEY:-$(get_project_env QA_API_KEY "")}"
+EMBEDDING_MODEL="${EMBEDDING_MODEL:-$(get_project_env EMBEDDING_MODEL "contriever" "$REPO_ROOT")}"  # stella, contriever, gte, all-MiniLM-L6-v2
+LLM_MODEL="${LLM_MODEL:-$(get_stage_model index "gpt-4o-mini" "$REPO_ROOT")}"
+LLM_BACKEND="${LLM_BACKEND:-$(get_project_env LLM_BACKEND "openai" "$REPO_ROOT")}"
+BASE_URL="${BASE_URL:-$(get_stage_base_url index "" "$REPO_ROOT")}"
+API_KEY="${API_KEY:-$(get_stage_api_key index "" "$REPO_ROOT")}"
+QA_LLM="${QA_LLM:-$(get_stage_model qa "" "$REPO_ROOT")}"
+QA_API_BASE="${QA_API_BASE:-$(get_stage_base_url qa "" "$REPO_ROOT")}"
+QA_API_KEY="${QA_API_KEY:-$(get_stage_api_key qa "" "$REPO_ROOT")}"
 
 # Retrieval configuration
-RETRIEVE_METHOD="${RETRIEVE_METHOD:-$(get_project_env RETRIEVE_METHOD "separate")}"   # merge, merge_raw, or separate
-QA_RETRIEVE_METHOD="${QA_RETRIEVE_METHOD:-$(get_project_env QA_RETRIEVE_METHOD "flatten")}"  # flatten or default
+RETRIEVE_METHOD="${RETRIEVE_METHOD:-$(get_project_env RETRIEVE_METHOD "merge" "$REPO_ROOT")}"   # merge, merge_raw, or separate
+QA_RETRIEVE_METHOD="${QA_RETRIEVE_METHOD:-$(get_project_env QA_RETRIEVE_METHOD "flatten" "$REPO_ROOT")}"  # flatten or default
 
-TOP_K="${TOP_K:-$(get_project_env TOP_K "20")}"
+TOP_K="${TOP_K:-$(get_project_env TOP_K "20" "$REPO_ROOT")}"
 
 # Version identifier
-VERSION="${VERSION:-$(get_project_env VERSION "tmp")}"
+VERSION="${VERSION:-$(get_project_env VERSION "tmp" "$REPO_ROOT")}"
 
 # Resume from checkpoint
-RESUME="${RESUME:-$(get_project_env RESUME "true")}"
+RESUME="${RESUME:-$(get_project_env RESUME "true" "$REPO_ROOT")}"
 
 # Skip QA generation (only run memory extraction and retrieval)
-SKIP_QA="${SKIP_QA:-$(get_project_env SKIP_QA "false")}"
+SKIP_QA="${SKIP_QA:-$(get_project_env SKIP_QA "false" "$REPO_ROOT")}"
 
-ENABLE_UPDATE="${ENABLE_UPDATE:-$(get_project_env ENABLE_UPDATE "false")}"
+ENABLE_UPDATE="${ENABLE_UPDATE:-$(get_project_env ENABLE_UPDATE "false" "$REPO_ROOT")}"
 
 # Keep original note after update operation
-KEEP_UPDATE_NOTE="${KEEP_UPDATE_NOTE:-$(get_project_env KEEP_UPDATE_NOTE "true")}"
+KEEP_UPDATE_NOTE="${KEEP_UPDATE_NOTE:-$(get_project_env KEEP_UPDATE_NOTE "true" "$REPO_ROOT")}"
 
 # Use cached metadata
-USE_METADATA_CACHE="${USE_METADATA_CACHE:-$(get_project_env USE_METADATA_CACHE "true")}"
+USE_METADATA_CACHE="${USE_METADATA_CACHE:-$(get_project_env USE_METADATA_CACHE "true" "$REPO_ROOT")}"
 
 # Dataset version: medium or long
-DATASET="${DATASET:-$(get_project_env DATASET "medium")}"
+DATASET="${DATASET:-$(get_project_env DATASET "medium" "$REPO_ROOT")}"
 
-NUM_WORKERS="${NUM_WORKERS:-$(get_project_env NUM_WORKERS "8")}"
+NUM_WORKERS="${NUM_WORKERS:-$(get_project_env NUM_WORKERS "8" "$REPO_ROOT")}"
 
 # ===== Parse arguments =====
 while [[ $# -gt 0 ]]; do
@@ -157,7 +140,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --embedding-model MODEL    Embedding model (default: contriever)"
             echo "                             Options: stella, contriever, gte, all-MiniLM-L6-v2, all-mpnet-base-v2"
             echo "  --retrieve-method METHOD   Retrieval method (default: merge)"
-            echo "                             Options: merge, separate"
+            echo "                             Options: merge, separate, merge_raw"
             echo "  --llm-model MODEL          LLM model for memory operations (default: gpt-4o-mini)"
             echo "  --llm-backend BACKEND      LLM backend (default: openai)"
             echo "                             Options: openai, vllm"
@@ -171,9 +154,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --no-metadata-cache        Don't use cached metadata"
             echo "  --base-url URL             Base URL for LLM API (for vLLM)"
             echo "  --api-key KEY              API key for LLM"
-            echo "  --qa-llm MODEL             QA model (defaults to QA_LLM or llm_model)"
-            echo "  --qa-api-base URL          Base URL for QA model API"
-            echo "  --qa-api-key KEY           API key for QA model API"
+            echo "  --qa-llm MODEL             QA model (defaults to QA_LLM_MODEL/LLM_MODEL or llm_model)"
+            echo "  --qa-api-base URL          Base URL for QA model API (defaults to QA_BASE_URL/OPENAI_BASE_URL)"
+            echo "  --qa-api-key KEY           API key for QA model API (defaults to QA_API_KEY/OPENAI_API_KEY)"
             echo "  --help                     Show this help message"
             exit 0
             ;;
@@ -209,6 +192,12 @@ if [ ! -f "$DATA_PATH" ]; then
         echo "Or place a small sample at: ${REPO_ROOT}/sample_data/${DATA_BASENAME} for smoke testing." >&2
         exit 1
     fi
+fi
+
+# Keep shell defaults aligned with the Python implementation.
+# Both `merge` and `merge_raw` expect raw session content to be indexed.
+if [ "$RETRIEVE_METHOD" == "merge" ] || [ "$RETRIEVE_METHOD" == "merge_raw" ]; then
+    USE_RAW_SESSION_AS_KEY="true"
 fi
 
 # ===== Build command =====

@@ -20,7 +20,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run graph-based retrieval for LongMemEval data")
     parser.add_argument("--in_file", type=str, default=os.path.join(REPO_ROOT_STR, "data", "longmemeval_s_cleaned.json"),
                         help="Path to input JSON file with questions")
-    parser.add_argument("--out_dir", type=str, default=os.path.join(REPO_ROOT_STR, "data", f"graph_m-{cfg.getenv('LLM_MODEL', 'gpt-4o-mini')}") ,
+    parser.add_argument("--out_dir", type=str, default=os.path.join(REPO_ROOT_STR, "data", f"graph_m-{cfg.get_stage_model('index', 'gpt-4o-mini')}") ,
                         help="Directory to store per-question working dirs and final output")
     parser.add_argument("--embedding", type=str, default=cfg.getenv('EMBEDDING_MODEL', 'auto'),
                         help="Embedding backend to use. Use 'contriever' or 'openai' to force; 'auto' (default) will follow EMDEDING_MODEL/EMBEDDING_API_URL config")
@@ -64,7 +64,7 @@ def main(args=None):
         question = entry["question"]
 
         # Include LLM model in per-question workdir name so it reflects the active model
-        model_tag = cfg.getenv('LLM_MODEL', 'gpt-4o-mini')
+        model_tag = cfg.get_stage_model('index', 'gpt-4o-mini')
         work_dir = os.path.join(args.out_dir, f"{question_id}-{model_tag}")
         kwargs = {"working_dir": work_dir}
         if entity_namespace is not None:

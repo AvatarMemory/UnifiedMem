@@ -25,6 +25,7 @@ import tiktoken
 from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type
 
 from src.flat.llm_controller import LLMController
+from src import config as cfg
 
 
 class AMSResponse(BaseModel):
@@ -214,22 +215,18 @@ class FlexibleEmbeddingRetriever:
         
         elif self.model_type == 'openai':
             # OpenAI embeddings - initialize client
-            # Prefer embedding-specific env vars, fall back to general OpenAI/LLM vars.
-            embedding_key = os.getenv('EMBEDDING_API_KEY') or os.getenv('OPENAI_API_KEY') or os.getenv('LLM_API_KEY')
+            embedding_key = cfg.get_embedding_api_key(None)
             if not embedding_key:
                 raise ValueError(
                     "No API key found for OpenAI embeddings. Set EMBEDDING_API_KEY or OPENAI_API_KEY or LLM_API_KEY in the environment"
                 )
 
-            # Prefer embedding-specific base URL, then fall back to common OpenAI/LLM vars.
-            embedding_base = (
-                os.getenv('EMBEDDING_API_URL') or os.getenv('OPENAI_BASE_URL') or os.getenv('OPENAI_API_BASE') or os.getenv('LLM_BASE_URL')
-            )
+            embedding_base = cfg.get_embedding_base_url(None)
 
             # Initialize OpenAI client for embeddings
             self.openai_client = OpenAI(api_key=embedding_key, base_url=embedding_base or None)
             if not self.openai_model_name:
-                self.openai_model_name = 'text-embedding-3-small'  # Default OpenAI model
+                self.openai_model_name = cfg.get_embedding_model('text-embedding-3-small')
             self.model = None  # No local model needed
         
         else:

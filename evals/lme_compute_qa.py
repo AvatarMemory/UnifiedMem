@@ -55,31 +55,50 @@ def get_anscheck_prompt(task, question, answer, response, abstention=False):
     return prompt
 
 
-if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        print('Usage: python evaluate_qa.py metric_model hyp_file ref_file')
-        exit()
+def resolve_metric_model(metric_model_short: str | None):
+    requested = metric_model_short
+    if requested in (None, "", "auto"):
+        requested = cfg.get_stage_model('qa_eval', 'gpt-4o-mini')
 
-    metric_model_short = sys.argv[1]
-    hyp_file = sys.argv[2]
-    ref_file =  sys.argv[3] if len(sys.argv) > 3 else 'data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json'
+    if requested in model_zoo:
+        source_name, source_type = model_zoo[requested]
+        return requested, source_name, source_type
+
+    reverse_map = {full_name: (short_name, source_type) for short_name, (full_name, source_type) in model_zoo.items()}
+    if requested in reverse_map:
+        short_name, source_type = reverse_map[requested]
+        return short_name, requested, source_type
+
+    raise ValueError(f"Requested metric model is not supported: {requested}")
+
+
+if __name__ == '__main__':
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('metric_model', nargs='?', default='auto',
+                        help='Metric model alias/full name. Use auto to read QA_EVAL_LLM_MODEL/LLM_MODEL.')
+    parser.add_argument('hyp_file')
+    parser.add_argument('ref_file', nargs='?', default='data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json')
+    parser.add_argument('--metric-model', dest='metric_model_kw', default=None,
+                        help='Keyword alias for metric model; overrides the positional value when provided.')
+    args = parser.parse_args()
+
+    metric_model_short = args.metric_model_kw or args.metric_model
+    hyp_file = args.hyp_file
+    ref_file = args.ref_file
     verbose = False
     
+    metric_model_short, metric_model, metric_model_source = resolve_metric_model(metric_model_short)
     result_file = hyp_file + '.eval-results-{}'.format(metric_model_short)
 
-    if metric_model_short not in model_zoo:
-        print('Requested metric model is not supported:', metric_model_short)
-        exit()
-    metric_model, metric_model_source = model_zoo[metric_model_short]
     if metric_model_source == 'openai':
-        # Prefer project config/env via src.config
         openai.organization = cfg.getenv('OPENAI_ORGANIZATION', os.getenv('OPENAI_ORGANIZATION'))
-        openai_api_key = cfg.getenv('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY'))
-        openai_api_base = cfg.getenv('OPENAI_BASE_URL', cfg.getenv('LLM_BASE_URL', os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1')))
+        openai_api_key = cfg.get_stage_api_key('qa_eval', os.getenv('OPENAI_API_KEY'))
+        openai_api_base = cfg.get_stage_base_url('qa_eval', 'https://api.openai.com/v1')
     else:
-        openai_api_key = cfg.getenv('OPENAI_API_KEY', os.getenv('OPENAI_API_KEY'))
-        # Resolve base URL for local/other model backends from project config first
-        openai_api_base = cfg.getenv('OPENAI_BASE_URL', cfg.getenv('LLM_BASE_URL', os.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
+        openai_api_key = cfg.get_stage_api_key('qa_eval', os.getenv('OPENAI_API_KEY'))
+        openai_api_base = cfg.get_stage_base_url('qa_eval', 'http://localhost:8001/v1')
     
     metric_client = OpenAI(
         api_key=openai_api_key,
@@ -98,7 +117,16 @@ if __name__ == '__main__':
     qid2qtype = {entry['question_id']: entry['question_type'] for entry in references}
     qtypes = set(list(qid2qtype.values()))
     qtype2acc = {t: [] for t in qtypes}
-    assert len(hypotheses) == 500
+    hypothesis_ids = [entry['question_id'] for entry in hypotheses if 'question_id' in entry]
+    reference_ids = [entry['question_id'] for entry in references if 'question_id' in entry]
+    if len(hypotheses) != len(references):
+        missing_ids = sorted(set(reference_ids) - set(hypothesis_ids))
+        extra_ids = sorted(set(hypothesis_ids) - set(reference_ids))
+        raise ValueError(
+            f"Hypothesis/reference size mismatch: got {len(hypotheses)} hypotheses but {len(references)} references. "
+            f"Missing question_ids: {missing_ids[:20]}{'...' if len(missing_ids) > 20 else ''}. "
+            f"Extra question_ids: {extra_ids[:20]}{'...' if len(extra_ids) > 20 else ''}."
+        )
 
     with open(result_file, 'w') as out_f:
         logs = []

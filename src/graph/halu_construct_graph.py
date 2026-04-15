@@ -14,6 +14,11 @@ if REPO_ROOT_STR not in sys.path:
 
 from src.graph.graphrag import GraphRAG, QueryParam
 from src.graph._llm import contriever_embedding, openai_embedding
+from src.graph._utils import (
+    resolve_halu_dataset_path,
+    resolve_halu_graph_root,
+)
+from src import config as cfg
 
 
 def load_entries(in_path: str):
@@ -32,16 +37,22 @@ def load_entries(in_path: str):
     return entry_list
 
 
-def build_graph(entry_list, project_root: str):
+def build_graph(
+    entry_list,
+    graph_root: str,
+    embedding_func=None,
+    entity_namespace: str | None = None,
+    relation_namespace: str | None = None,
+):
     # 每个用户分别建图，每个session添加到上一个图中，并保存新的储存副本
     for entry in tqdm(entry_list, desc="Building graphs"):
         user_id = entry.get("uuid")
         # 建图代码
         for session_idx in range(len(entry.get("sessions"))):
-            working_dir = os.path.join(project_root, "data", "nc-graph_halu_mem_medium-4o-mini", user_id, str(session_idx))
+            working_dir = os.path.join(graph_root, user_id, str(session_idx))
             os.makedirs(working_dir, exist_ok=True)
             if session_idx != 0:
-                prev_working_dir = os.path.join(project_root, "data", "nc-graph_halu_mem_medium-4o-mini", user_id, str(session_idx - 1))
+                prev_working_dir = os.path.join(graph_root, user_id, str(session_idx - 1))
                 # copy previous working dir files to current dir (preserve if exists)
                 try:
                     for fname in os.listdir(prev_working_dir):
@@ -57,12 +68,14 @@ def build_graph(entry_list, project_root: str):
                     # previous dir might not exist for some users, that's fine
                     pass
 
-            graph_func = GraphRAG(
-                working_dir=working_dir,
-                entity_vdb_namespace="text-embedding-3-small_entities",
-                relation_vdb_namespace="text-embedding-3-small_relations",
-                embedding_func=openai_embedding,
-            )
+            kwargs = {"working_dir": working_dir}
+            if entity_namespace is not None:
+                kwargs["entity_vdb_namespace"] = entity_namespace
+            if relation_namespace is not None:
+                kwargs["relation_vdb_namespace"] = relation_namespace
+            if embedding_func is not None:
+                kwargs["embedding_func"] = embedding_func
+            graph_func = GraphRAG(**kwargs)
 
             # 每个session作为一个chunk，拼接起来
             session_entry = entry.get("sessions")[session_idx]
@@ -87,18 +100,57 @@ def retrive_eval(entry_list, project_root: str):
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Construct graphs for HaluMem dataset")
-    parser.add_argument("--in_file", type=str, default=os.path.join(REPO_ROOT_STR, "data", "HaluMem-Medium.jsonl"),
-                        help="Path to input JSONL file (default: data/HaluMem-Medium.jsonl)")
+    parser.add_argument("--in_file", type=str, default=None,
+                        help="Path to input JSONL file (defaults to DATA_DIR/HaluMem/HaluMem-Medium.jsonl or HALU_DATA_PATH)")
+    parser.add_argument("--out_dir", "--graph_root", dest="graph_root", type=str, default=None,
+                        help="Directory to store per-user/session graph outputs (defaults to HALU_GRAPH_ROOT/GRAPH_ROOT or repo data)")
+    parser.add_argument("--embedding", type=str, default=cfg.getenv('EMBEDDING_MODEL', 'auto'),
+                        help="Embedding backend to use (contriever, openai, or auto)")
+    parser.add_argument("--entity_namespace", type=str, default=cfg.getenv('ENTITY_NAMESPACE', None),
+                        help="Optional entity namespace override")
+    parser.add_argument("--relation_namespace", type=str, default=cfg.getenv('RELATION_NAMESPACE', None),
+                        help="Optional relation namespace override")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    entry_list = load_entries(args.in_file)
-    print(f"Loaded {len(entry_list)} entries from {args.in_file}")
-    build_graph(entry_list, REPO_ROOT_STR)
+    in_file = resolve_halu_dataset_path(args.in_file)
+    graph_root = resolve_halu_graph_root(args.graph_root, dataset_path=in_file)
+    embedding_func = None
+    entity_namespace = args.entity_namespace
+    relation_namespace = args.relation_namespace
+
+    if args.embedding == "contriever":
+        embedding_func = contriever_embedding
+        entity_namespace = entity_namespace or "contriever_name_entities"
+    elif args.embedding == "openai":
+        embedding_func = openai_embedding
+        entity_namespace = entity_namespace or "openai_name_entities"
+    else:
+        default_emb = cfg.getenv('EMBEDDING_MODEL', None)
+        if default_emb == 'contriever':
+            embedding_func = contriever_embedding
+            entity_namespace = entity_namespace or "contriever_name_entities"
+        elif default_emb == 'openai':
+            embedding_func = openai_embedding
+            entity_namespace = entity_namespace or "openai_name_entities"
+        else:
+            embedding_func = openai_embedding
+            entity_namespace = entity_namespace or "text-embedding-3-small_entities"
+            relation_namespace = relation_namespace or "text-embedding-3-small_relations"
+
+    entry_list = load_entries(in_file)
+    print(f"Loaded {len(entry_list)} entries from {in_file}")
+    print(f"Writing graph artifacts to {graph_root}")
+    build_graph(
+        entry_list,
+        graph_root,
+        embedding_func=embedding_func,
+        entity_namespace=entity_namespace,
+        relation_namespace=relation_namespace,
+    )
 
 
 if __name__ == "__main__":
     main()
-

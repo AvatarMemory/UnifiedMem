@@ -7,12 +7,11 @@ import json
 import logging
 import sys
 import argparse
+from pathlib import Path
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, Callable, List, Tuple, Dict
 import xml.etree.ElementTree as ET
-from openai import OpenAI
-from tenacity import retry, stop_after_attempt, wait_random_exponential, before_sleep_log
 from tqdm import tqdm
 import copy
 from dotenv import load_dotenv
@@ -30,45 +29,47 @@ if os.path.exists(local_env):
     # load local overrides and allow them to override repo values
     load_dotenv(local_env, override=True)
 
-# --- Environment-backed configuration (provide sensible defaults) ---
-# Retry / wait settings
-RETRY_TIMES = int(os.getenv('RETRY_TIMES', '3'))
-WAIT_TIME_LOWER = int(os.getenv('WAIT_TIME_LOWER', '10'))
-WAIT_TIME_UPPER = int(os.getenv('WAIT_TIME_UPPER', '30'))
-
-# OpenAI / LLM settings
-OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', os.getenv('LLM_BASE_URL', None))
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_MODEL = os.getenv('OPENAI_MODEL', os.getenv('MODEL', 'gpt-4o'))
-
-# Optional tuning params
-OPENAI_MAX_TOKENS = os.getenv('OPENAI_MAX_TOKENS')
-OPENAI_TEMPERATURE = os.getenv('OPENAI_TEMPERATURE', '0.0')
-OPENAI_TIMEOUT = os.getenv('OPENAI_TIMEOUT', '300')
-
-# Project root (fallback to repo root)
-PROJECT_ROOT = os.getenv('PROJECT_ROOT', repo_root)
-
-logger = logging.getLogger(__name__)
-
-common_params = {}
-common_params["max_tokens"] = int(OPENAI_MAX_TOKENS)
-common_params["temperature"] = float(OPENAI_TEMPERATURE)
-common_params["timeout"] = int(OPENAI_TIMEOUT)
-
-client = OpenAI(
-    base_url=OPENAI_BASE_URL or None,
-    api_key=OPENAI_API_KEY or None,
-)
-
-
 if __package__ is None and __name__ == '__main__':
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
     __package__ = 'evals'
-    
+
+from src import config as cfg
+from src.graph._utils import (
+    ensure_dir,
+    find_latest_retrieval_file,
+    resolve_halu_dataset_path,
+    resolve_halu_graph_root,
+)
 from .halu_eval_utils import llm_request
+
+# --- Environment-backed configuration (provide sensible defaults) ---
+# Retry / wait settings
+RETRY_TIMES = cfg.get_int('RETRY_TIMES', 3)
+WAIT_TIME_LOWER = cfg.get_int('WAIT_TIME_LOWER', 10)
+WAIT_TIME_UPPER = cfg.get_int('WAIT_TIME_UPPER', 30)
+
+# OpenAI / LLM settings
+OPENAI_BASE_URL = cfg.get_stage_base_url('qa', None)
+OPENAI_API_KEY = cfg.get_stage_api_key('qa', '')
+OPENAI_MODEL = cfg.get_stage_model('qa', 'gpt-4o-mini')
+
+# Optional tuning params
+OPENAI_MAX_TOKENS = cfg.getenv('OPENAI_MAX_TOKENS', None)
+OPENAI_TEMPERATURE = cfg.getenv('OPENAI_TEMPERATURE', '0.0')
+OPENAI_TIMEOUT = cfg.getenv('OPENAI_TIMEOUT', '300')
+
+# Project root (fallback to repo root)
+PROJECT_ROOT = cfg.getenv('PROJECT_ROOT', repo_root)
+
+logger = logging.getLogger(__name__)
+
+common_params = {}
+if OPENAI_MAX_TOKENS:
+    common_params["max_tokens"] = int(OPENAI_MAX_TOKENS)
+common_params["temperature"] = float(OPENAI_TEMPERATURE)
+common_params["timeout"] = int(OPENAI_TIMEOUT)
 
 # Optional shared prompt template used by adapters
 PROMPT_ANSWER_COMPLEX = """
@@ -177,7 +178,7 @@ def extract_user_name(persona_info: str):
 
 def test_llm_request():
     prompt = "Tell me a joke about computers."
-    response = llm_request(prompt)
+    response = llm_request(prompt, stage="qa")
     print("LLM Response:", response)
 
 def configure_logging(level=logging.INFO):
@@ -204,6 +205,39 @@ def iter_jsonl(file_path: str):
             line = line.strip()
             if line:
                 yield json.loads(line)
+
+
+def resolve_output_file(out_path: str | None, default_dir: str, default_name: str) -> str:
+    if out_path:
+        candidate = Path(out_path).expanduser()
+        if candidate.suffix:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            return str(candidate.resolve())
+        candidate.mkdir(parents=True, exist_ok=True)
+        return str((candidate / default_name).resolve())
+
+    ensure_dir(default_dir)
+    return str((Path(default_dir) / default_name).resolve())
+
+
+def resolve_retrieval_file(retrieve_file_path: str | None, graph_root: str) -> str:
+    if retrieve_file_path:
+        candidate = Path(retrieve_file_path).expanduser()
+        if candidate.is_file():
+            return str(candidate.resolve())
+        if candidate.is_absolute():
+            return str(candidate)
+        return str((Path(graph_root) / candidate).resolve())
+
+    latest = find_latest_retrieval_file(graph_root)
+    if latest:
+        logger.info("Using latest retrieval file under %s: %s", graph_root, latest)
+        return latest
+
+    raise FileNotFoundError(
+        f"No retrieval result JSON found under graph_root={graph_root}. "
+        "Please run graph retrieval first or pass --retrieve_file_path."
+    )
 
 def make_context_from_rawcontext_chunk(raw_context: List[dict], top_k: int = 5) -> str:
     """
@@ -257,7 +291,7 @@ def make_context_from_rawcontext_entity(raw_context: List[dict], top_k: int = 20
 
 ### compute add_memory contents for evaluating
 def compute_addmemory(graph_root: str | None = None, out_path: str | None = None):
-    filepath = graph_root or os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
+    filepath = resolve_halu_graph_root(graph_root)
     """
     For each user (a directory under `filepath`), pick the session subdirectory with the
     largest numeric name. Parse that session's GraphML files (e.g. `graph_chunk_entity_relation.graphml`),
@@ -272,11 +306,7 @@ def compute_addmemory(graph_root: str | None = None, out_path: str | None = None
     """
 
     # prefer explicit CLI output path if provided (re-using --out_path); otherwise default to graph_root/add_memory_by_session.json
-    if out_path:
-        os.makedirs(out_path, exist_ok=True)
-        out_file = os.path.join(out_path, "add_memory_by_session.json")
-    else:
-        out_file = os.path.join(filepath, "add_memory_by_session.json")
+    out_file = resolve_output_file(out_path, filepath, "add_memory_by_session.json")
     sessions: Dict[str, List[Dict[str, Any]]] = {}
 
     if not os.path.isdir(filepath):
@@ -457,43 +487,18 @@ def gen_eval_file(
     Output:
       - Writes a JSONL file next to the retrieval input file using `out_suffix`.
     """
-    # allow caller to override the graph root path
-    filepath = graph_root or os.path.join(PROJECT_ROOT, "data/nc-graph_halu_mem_medium-4o-mini")
+    dataset_path = resolve_halu_dataset_path(dataset_path)
+    filepath = resolve_halu_graph_root(graph_root, dataset_path=dataset_path)
     add_mem_file = os.path.join(filepath, "add_memory_by_session.json")
+    retrieve_file_path = resolve_retrieval_file(retrieve_file_path, filepath)
+    base_name = os.path.basename(retrieve_file_path)
+    out_name = base_name.replace(".json", out_suffix) if base_name.lower().endswith(".json") else base_name + out_suffix
+    res_filepath = resolve_output_file(out_path, filepath, out_name)
 
-    # resolve retrieval file path: if user provided a path use it; otherwise assume default filename under graph root
-    if retrieve_file_path:
-        # if a relative filename was provided, prefer the file under the graph root
-        if not os.path.isabs(retrieve_file_path) and not os.path.exists(retrieve_file_path):
-            retrieve_file_path = os.path.join(filepath, retrieve_file_path)
-    else:
-        # default filename under graph root
-        retrieve_file_path = os.path.join(filepath, "graph_retrieval_results_entity-chunk-1hop-top20.json")
-    # If an explicit output path is provided via CLI, use it; otherwise place result file under graph_root
-    if out_path:
-        if not os.path.isdir(out_path):
-            os.makedirs(out_path, exist_ok=True)
-        base_name = os.path.basename(retrieve_file_path)
-        if base_name.lower().endswith(".json"):
-            out_name = base_name.replace(".json", out_suffix)
-        else:
-            out_name = base_name + out_suffix
-        res_filepath = os.path.join(out_path, out_name)
-    else:
-        base_name = os.path.basename(retrieve_file_path)
-        if base_name.lower().endswith(".json"):
-            out_name = base_name.replace(".json", out_suffix)
-        else:
-            out_name = base_name + out_suffix
-        res_filepath = os.path.join(filepath, out_name)
+    if not os.path.exists(add_mem_file):
+        logger.info("add_memory_by_session.json not found under %s, generating it now", filepath)
+        compute_addmemory(filepath)
 
-    # resolve dataset path: allow absolute path or filename under PROJECT_ROOT/data
-
-    if dataset_path == None:
-        # warn and exit
-        logger.error("gen_eval_file: dataset_path must be provided")
-        return
-    # read data
     add_mem = read_json(add_mem_file, default={})
     retrieval = read_json(retrieve_file_path, default={})
     dataset = []
@@ -509,76 +514,73 @@ def gen_eval_file(
 
     # read user info from dataset_data
     # results: List[Dict[str, Any]] = []  # collect all users' processed data
-    for user_data in dataset:
-        user_name = extract_user_name(user_data["persona_info"])
-        user_name = user_name.replace(" ", "_")
-        sessions = user_data["sessions"]
+    with open(res_filepath, "w", encoding="utf-8") as f:
+        for user_data in dataset:
+            user_name = extract_user_name(user_data["persona_info"])
+            user_name = user_name.replace(" ", "_")
+            sessions = user_data["sessions"]
 
-        new_user_data = {
-        "uuid": user_data["uuid"],
-        "user_name": user_name,
-        "sessions": []
-        }
-        session_id = -1
-        for session in tqdm(sessions, total=len(sessions), desc=f"Processing user {user_name}"):
-            session_id += 1
-            sid = f"{user_data['uuid']}_session{session_id}"
-            new_session = {"memory_points": session["memory_points"], "dialogue": session["dialogue"]}
-            if session.get('is_generated_qa_session', False):
-                new_session["add_dialogue_duration_ms"] = 1 # 为了兼容性
-                new_session["is_generated_qa_session"] = True
-                del new_session["dialogue"]
-                del new_session["memory_points"]
-                new_user_data["sessions"].append(new_session)
-                continue
-            new_session["extracted_memories"] = add_mem.get(sid, [])
-            new_session["add_dialogue_duration_ms"] = 1
-
-            # we do not calulate memory int
-            for memory in new_session["memory_points"]:
-                if memory["is_update"] == "False" or not memory["original_memories"]:
+            new_user_data = {
+                "uuid": user_data["uuid"],
+                "user_name": user_name,
+                "sessions": []
+            }
+            session_id = -1
+            for session in tqdm(sessions, total=len(sessions), desc=f"Processing user {user_name}"):
+                session_id += 1
+                sid = f"{user_data['uuid']}_session{session_id}"
+                new_session = {"memory_points": session["memory_points"], "dialogue": session["dialogue"]}
+                if session.get('is_generated_qa_session', False):
+                    new_session["add_dialogue_duration_ms"] = 1
+                    new_session["is_generated_qa_session"] = True
+                    del new_session["dialogue"]
+                    del new_session["memory_points"]
+                    new_user_data["sessions"].append(new_session)
                     continue
-                # use hippo to get top matching facts
-                # context_str, matches, search_dur = search_memory(hippo=hippo, query=memory["memory_content"], user_id=user_name, top_k=10)
-                memory["memories_from_system"] = []
+                new_session["extracted_memories"] = add_mem.get(sid, [])
+                new_session["add_dialogue_duration_ms"] = 1
 
-            if "questions" not in session:
+                for memory in new_session["memory_points"]:
+                    if memory["is_update"] == "False" or not memory["original_memories"]:
+                        continue
+                    memory["memories_from_system"] = []
+
+                if "questions" not in session:
+                    new_user_data["sessions"].append(new_session)
+                    continue
+
+                new_session["questions"] = []
+                for qd, qa in enumerate(session["questions"]):
+                    qid = f"{sid}_question{qd}"
+                    context_raw_str = retrieval.get(qid, [])
+                    if not isinstance(context_raw_str, list):
+                        context_raw_str = []
+
+                    new_qa = copy.deepcopy(qa)
+                    if use_entity:
+                        new_qa["context"] = make_context_from_rawcontext_entity(context_raw_str)
+                    else:
+                        new_qa["context"] = make_context_from_rawcontext_chunk(context_raw_str)
+                    new_qa["search_duration_ms"] = 1
+
+                    prompt_template = globals().get('PROMPT_ANSWER', None)
+                    if not prompt_template:
+                        prompt_template = "{context}\nQuestion: {question}\nAnswer:"
+
+                    prompt = prompt_template.format(context=new_qa["context"], question=qa["question"])
+
+                    start_time = time.time()
+                    response = llm_request(prompt, stage="qa")
+                    new_qa["system_response"] = response
+                    new_qa["response_duration_ms"] = (time.time() - start_time) * 1000
+
+                    new_session["questions"].append(new_qa)
                 new_user_data["sessions"].append(new_session)
-                continue
-                
-            new_session["questions"] = []
-            for qd, qa in enumerate(session["questions"]):
-                # retrieve top_k docs as context
-                # print(f"🔍 Retrieving for question: {qa['question']}")
-                qid = f"{sid}_question{qd}"
-                context_raw_str = retrieval.get(qid, {})
-
-                new_qa = copy.deepcopy(qa)
-                # context_str already contains a formatted TEMPLATE_MEM0_GRAPH string
-                # choose context builder based on `use_entity`
-                if use_entity:
-                    new_qa["context"] = make_context_from_rawcontext_entity(context_raw_str)
-                else:
-                    new_qa["context"] = make_context_from_rawcontext_chunk(context_raw_str)
-                new_qa["search_duration_ms"] = 1
-
-                prompt_template = globals().get('PROMPT_ANSWER', None)
-                if not prompt_template:
-                    # fallback minimal template
-                    prompt_template = "{context}\nQuestion: {question}\nAnswer:"
-
-                prompt = prompt_template.format(context=new_qa["context"], question=qa["question"])
-
-                start_time = time.time()
-                response = llm_request(prompt)
-                new_qa["system_response"] = response
-                new_qa["response_duration_ms"] = (time.time() - start_time) * 1000
-
-                new_session["questions"].append(new_qa)
-            new_user_data["sessions"].append(new_session)
-        with open(res_filepath, "a", encoding="utf-8") as f:
             json.dump(new_user_data, f, ensure_ascii=False)
             f.write("\n")
+
+    logger.info("Wrote merged graph eval JSONL to %s", res_filepath)
+    return res_filepath
 
 
 ### evaluating script
@@ -589,21 +591,27 @@ if __name__ == "__main__":
     parser.add_argument('--mode', type=str, choices=['gen_eval', 'add_memory', 'retrieve_memory', 'test_llm'], default='gen_eval',
                         help='Which operation to run (default: gen_eval)')
     parser.add_argument('--retrieve_file_path', type=str, default=None,
-                        help='(Optional) retrieval file path or filename under graph_root. If omitted, a default name under graph_root is used')
+                        help='Retrieval result JSON path or filename under graph_root. If omitted, the latest graph_retrieval_results*.json under graph_root is used')
     parser.add_argument('--use_entity', action='store_true', help='Use entity-based context builder')
     parser.add_argument('--out_suffix', type=str, default="_test_eval_results.jsonl")
-    parser.add_argument('--dataset_path', type=str, default="HaluMem-Medium.jsonl",
-                        help='Path to the Halu dataset JSONL file (absolute path or filename under project `data/`)')
+    parser.add_argument('--dataset_path', type=str, default=None,
+                        help='Path to the Halu dataset JSONL file (defaults to HALU_DATA_PATH or DATA_DIR/HaluMem/HaluMem-Medium.jsonl)')
+    parser.add_argument('--output_file', type=str, default=None,
+                        help='Explicit output file path for add_memory JSON or merged eval JSONL')
+    parser.add_argument('--output_dir', type=str, default=None,
+                        help='Output directory for add_memory JSON or merged eval JSONL')
     parser.add_argument('--out_path', type=str, default=None,
-                        help='(Optional) explicit output path for the merged eval JSONL or add_memory output (overrides graph_root placement)')
-    parser.add_argument('--graph_root', type=str, default=None, help='Path to graph root directory (overrides default data/nc-graph_halu_mem_medium-4o-mini)')
+                        help='Backward-compatible alias for --output_file/--output_dir')
+    parser.add_argument('--graph_root', type=str, default=None,
+                        help='Path to graph root directory (defaults to HALU_GRAPH_ROOT/GRAPH_ROOT or repo data path)')
 
     args = parser.parse_args()
+    out_path = args.output_file or args.output_dir or args.out_path
 
     if args.mode == 'test_llm':
         test_llm_request()
     elif args.mode == 'add_memory':
-        compute_addmemory(args.graph_root, out_path=args.out_path)
+        compute_addmemory(args.graph_root, out_path=out_path)
     # elif args.mode == 'retrieve_memory':
     #     compute_retrievememory()
     else:
@@ -613,5 +621,5 @@ if __name__ == "__main__":
             out_suffix=args.out_suffix,
             dataset_path=args.dataset_path,
             graph_root=args.graph_root,
-            out_path=args.out_path,
+            out_path=out_path,
         )

@@ -17,6 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(REPO_ROOT / '.env', override=False)
 load_dotenv(Path(__file__).parent / '.env', override=True)
 
+import sys
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from src import config as cfg
+
 # Config (overridable from project .env or a nearer .env in this directory)
 NUM_WORKERS = int(os.getenv('NUM_WORKERS', '64'))
 SAVE_EVERY = int(os.getenv('SAVE_EVERY', '256'))
@@ -25,12 +31,11 @@ MAX_PARSE_RETRIES = int(os.getenv('MAX_PARSE_RETRIES', '5'))  # Max retries for 
 # Userfact extraction hyperparameters
 USERFACT_TEMPERATURE = float(os.getenv('USERFACT_TEMPERATURE', '1.0'))
 USERFACT_MAX_TOKENS = int(os.getenv('USERFACT_MAX_TOKENS', '2000'))
-LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://localhost:8001/v1')
 
 # OpenAI credentials (can be set in repo `.env` or data_preprocessing `.env`)
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '')
-OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', LLM_BASE_URL)
-MODEL_NAME = os.getenv('LLM_MODEL', 'gpt-4o-mini')
+OPENAI_API_KEY = cfg.get_stage_api_key('index', '')
+OPENAI_BASE_URL = cfg.get_stage_base_url('index', 'http://localhost:8001/v1')
+MODEL_NAME = cfg.get_stage_model('index', 'gpt-4o-mini')
 
 
 class UserFacts(BaseModel):
@@ -174,9 +179,9 @@ if __name__ == '__main__':
     mode = 'ICL'   # zero-shot, ICL
     assert mode in ['zero-shot', 'ICL']
     
-    in_file = 'data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json'
+    in_file = os.getenv('LME_IN_FILE', 'data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json')
     # in_file = 'data/longmemeval_s_cleaned.json'
-    cache_folder = 'data/longmemeval-cleaned/expansions-gpt4o_mini_temp1'
+    cache_folder = os.getenv('LME_CACHE_FOLDER', 'data/longmemeval-cleaned/expansions-gpt4o_mini_temp1')
     os.makedirs(cache_folder, exist_ok=True)
     cache_file = f'{cache_folder}/session-userfact.json'
     

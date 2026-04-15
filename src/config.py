@@ -9,7 +9,7 @@ def _load_dotenv_layers(env_name: Optional[str] = None):
     2. .env.<env_name> (if env_name provided)
     3. .env.local
 
-    Later files override earlier values.
+    Existing process env always wins. Later dotenv files only fill missing values.
     """
     try:
         from dotenv import load_dotenv
@@ -53,6 +53,121 @@ def getenv(key: str, default=None, cast: Optional[callable] = None):
     return val
 
 
+def _normalize_env_value(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "" or stripped.lower() == "none":
+            return None
+    return value
+
+
+def _get_first_env(keys: list[str], default=None):
+    for key in keys:
+        val = _normalize_env_value(os.getenv(key))
+        if val is not None:
+            return val
+    return default
+
+
+def _canonical_stage(stage: str) -> str:
+    normalized = (stage or "").strip().lower()
+    mapping = {
+        "qa_gen": "qa",
+        "qa_generation": "qa",
+        "retrieval": "retrieve",
+    }
+    return mapping.get(normalized, normalized)
+
+
+def _stage_prefix(stage: str) -> str:
+    normalized = _canonical_stage(stage)
+    mapping = {
+        "index": "INDEX",
+        "retrieve": "RETRIEVE",
+        "qa": "QA",
+        "qa_eval": "QA_EVAL",
+    }
+    return mapping.get(normalized, normalized.upper())
+
+
+def _stage_model_keys(stage: str) -> list[str]:
+    prefix = _stage_prefix(stage)
+    stage_name = _canonical_stage(stage)
+    keys = [f"{prefix}_LLM_MODEL", f"{prefix}_MODEL"]
+    if stage_name == "qa":
+        keys.append("QA_LLM")
+    return keys
+
+
+def _stage_base_url_keys(stage: str) -> list[str]:
+    prefix = _stage_prefix(stage)
+    stage_name = _canonical_stage(stage)
+    keys = [f"{prefix}_BASE_URL"]
+    if stage_name == "qa":
+        keys.append("QA_API_BASE")
+    return keys
+
+
+def _stage_api_key_keys(stage: str) -> list[str]:
+    prefix = _stage_prefix(stage)
+    stage_name = _canonical_stage(stage)
+    keys = [f"{prefix}_API_KEY"]
+    if stage_name == "qa":
+        keys.append("QA_API_KEY")
+    return keys
+
+
+def get_stage_model(stage: str, default: str = "gpt-4o-mini") -> str:
+    keys = _stage_model_keys(stage)
+    keys.append("LLM_MODEL")
+    return _get_first_env(keys, default)
+
+
+def get_stage_base_url(stage: str, default=None):
+    keys = _stage_base_url_keys(stage)
+    keys.extend(["OPENAI_BASE_URL", "LLM_BASE_URL"])
+    return _get_first_env(keys, default)
+
+
+def get_stage_api_key(stage: str, default=None):
+    keys = _stage_api_key_keys(stage)
+    keys.extend(["OPENAI_API_KEY", "LLM_API_KEY", "OPENAI_KEY"])
+    return _get_first_env(keys, default)
+
+
+def get_embedding_model(default: str = "text-embedding-3-small") -> str:
+    return _get_first_env(["EMBEDDING_MODEL", "OPENAI_EMBEDDING_MODEL"], default)
+
+
+def get_embedding_base_url(default=None):
+    return _get_first_env(
+        ["EMBEDDING_API_URL", "OPENAI_BASE_URL", "OPENAI_API_BASE", "LLM_BASE_URL"],
+        default,
+    )
+
+
+def get_embedding_api_key(default=None):
+    return _get_first_env(
+        ["EMBEDDING_API_KEY", "OPENAI_API_KEY", "LLM_API_KEY", "OPENAI_KEY"],
+        default,
+    )
+
+
+def get_stage_client_config(
+    stage: str,
+    default_model: str = "gpt-4o-mini",
+    default_base_url=None,
+    default_api_key=None,
+):
+    return {
+        "model": get_stage_model(stage, default=default_model),
+        "base_url": get_stage_base_url(stage, default=default_base_url),
+        "api_key": get_stage_api_key(stage, default=default_api_key),
+    }
+
+
 def get_int(key: str, default: int = 0) -> int:
     return getenv(key, default=default, cast=int)
 
@@ -73,4 +188,18 @@ def get_all_with_prefix(prefix: str):
     return {k: v for k, v in os.environ.items() if k.startswith(prefix)}
 
 
-__all__ = ["getenv", "get_int", "get_float", "get_bool", "get_all_with_prefix", "ENV_NAME"]
+__all__ = [
+    "getenv",
+    "get_int",
+    "get_float",
+    "get_bool",
+    "get_all_with_prefix",
+    "get_stage_model",
+    "get_stage_base_url",
+    "get_stage_api_key",
+    "get_stage_client_config",
+    "get_embedding_model",
+    "get_embedding_base_url",
+    "get_embedding_api_key",
+    "ENV_NAME",
+]

@@ -29,13 +29,13 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def resolve_generation_client_config(model_name=None, api_base=None, api_key=None):
-    resolved_model = model_name or cfg.getenv('QA_LLM', cfg.getenv('LLM_MODEL', 'meta-llama/Meta-Llama-3.1-8B-Instruct'))
-    resolved_base = api_base or cfg.getenv('QA_API_BASE', cfg.getenv('LLM_BASE_URL', cfg.getenv('OPENAI_BASE_URL', 'http://localhost:8001/v1')))
+    resolved_model = model_name or cfg.get_stage_model('qa', 'meta-llama/Meta-Llama-3.1-8B-Instruct')
+    resolved_base = api_base or cfg.get_stage_base_url('qa', 'http://localhost:8001/v1')
 
     if api_key not in (None, '', 'None'):
         resolved_key = api_key
     else:
-        resolved_key = cfg.getenv('QA_API_KEY', cfg.getenv('LLM_API_KEY', cfg.getenv('OPENAI_API_KEY', None)))
+        resolved_key = cfg.get_stage_api_key('qa', None)
         if resolved_key in (None, '', 'None') and 'gpt' not in resolved_model.lower():
             resolved_key = 'EMPTY'
 
@@ -77,6 +77,31 @@ def parse_args():
 
 def check_args(args):
     print(args)
+
+
+def resolve_retrieved_corpus_id(raw_corpus_id, corpusid2entry):
+    """Map a retrieval corpus_id back to the local haystack session id.
+
+    Graph retrieval may already return the exact session id present in the
+    haystack (including `noans_...` ids), while some legacy flat logs require
+    converting `noans_` to `answer_`. Prefer an exact match first, then try the
+    legacy normalization so we do not silently drop valid retrieved chunks.
+    """
+    candidates = [raw_corpus_id]
+
+    normalized_answer = raw_corpus_id.replace('noans_', 'answer_')
+    if normalized_answer not in candidates:
+        candidates.append(normalized_answer)
+
+    if raw_corpus_id.startswith('answer_'):
+        normalized_noans = raw_corpus_id.replace('answer_', 'noans_', 1)
+        if normalized_noans not in candidates:
+            candidates.append(normalized_noans)
+
+    for candidate in candidates:
+        if candidate in corpusid2entry:
+            return candidate
+    return None
 
 
 def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, history_format: str, cot: bool, tokenizer, tokenizer_backend, max_retrieval_length, merge_key_expansion_into_value, con=False, con_client=None, con_model=None, tokenizer_lock=None):    
@@ -197,8 +222,8 @@ def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, his
                 #                             [x for x in corpusid2entry[ret_result_entry['corpus_id'].replace('noans_', 'answer_')] if x['role'] == 'user']))
                 # else:
                 #     retrieved_chunks.append((corpusid2date[ret_result_entry['corpus_id'].replace('noans_', 'answer_')], corpusid2entry[ret_result_entry['corpus_id'].replace('noans_', 'answer_')]))
-                target_corpus_id = ret_result_entry['corpus_id'].replace('noans_', 'answer_')
-                if target_corpus_id in corpusid2entry:
+                target_corpus_id = resolve_retrieved_corpus_id(ret_result_entry['corpus_id'], corpusid2entry)
+                if target_corpus_id is not None:
                     if useronly:
                         retrieved_chunks.append((corpusid2date[target_corpus_id],
                                                 [x for x in corpusid2entry[target_corpus_id] if x['role'] == 'user']))
@@ -224,7 +249,9 @@ def prepare_prompt(entry, retriever_type, topk_context: int, useronly: bool, his
                     retrieved_chunks.append(("unknown", ret_result_entry['content']))
                 # retrieved_chunks.append((corpusid2date[ret_result_entry['corpus_id'].replace('noans_', 'answer_')], ret_result_entry['text']))
             elif merge_key_expansion_into_value == 'merge':
-                target_corpus_id = ret_result_entry['corpus_id'].replace('noans_', 'answer_')
+                target_corpus_id = resolve_retrieved_corpus_id(ret_result_entry['corpus_id'], corpusid2entry)
+                if target_corpus_id is None:
+                    continue
                 expansions = corpusid2retvalue.get(target_corpus_id)
                 if expansions is None:
                     if ret_result_entry['res_type'] == 'chunk':
@@ -438,6 +465,7 @@ def main(args):
         'gpt-4o': 128000,
         'gpt-4o-2024-08-06': 128000,
         "gpt-4o-mini-2024-07-18": 128000,
+        "gpt-4o-mini": 128000,
         'meta-llama/Meta-Llama-3.1-8B-Instruct': 128000,
         '/mnt/ceph/huggingface/Meta-Llama-3.1-8B-Instruct': 128000,
         'meta-llama/Meta-Llama-3.1-70B-Instruct': 128000,

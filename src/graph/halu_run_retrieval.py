@@ -13,6 +13,10 @@ if REPO_ROOT_STR not in sys.path:
 
 from src.graph.graphrag import GraphRAG, QueryParam
 from src.graph._llm import contriever_embedding, openai_embedding
+from src.graph._utils import (
+    resolve_halu_dataset_path,
+    resolve_halu_graph_root,
+)
 from src import config as cfg
 
 
@@ -36,7 +40,8 @@ def retrive_eval(entry_list, graph_root: str, out_path: str | None = None,
                 out_dir: str | None = None,
                 embedding: str = None,
                 graphrag_mode: str = "entity,chunk,one-hot-expand",
-                only_need_context: bool = True):
+                only_need_context: bool = True,
+                top_k: int = 20):
     retrieval_results = {}
     uidx = 0
 
@@ -79,7 +84,7 @@ def retrive_eval(entry_list, graph_root: str, out_path: str | None = None,
             print(f"[DEBUG]Evaluating user {uidx}, session {session_idx}")
             for question_idx in range(len(entry.get("sessions")[session_idx].get("questions", []))):
                 question = entry.get("sessions")[session_idx].get("questions")[question_idx].get("question")
-                query_param = QueryParam(mode="halumem", graphrag_mode=graphrag_modes, top_k=20, only_need_context=only_need_context)
+                query_param = QueryParam(mode="halumem", graphrag_mode=graphrag_modes, top_k=top_k, only_need_context=only_need_context)
                 retrieval_chunks = graph_func.query(question, query_param)
                 retrieval_results[f"{user_id}_session{session_idx}_question{question_idx}"] = retrieval_chunks
 
@@ -98,8 +103,8 @@ def retrive_eval(entry_list, graph_root: str, out_path: str | None = None,
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run retrieval evaluation for HaluMem graphs")
-    parser.add_argument("--in_file", type=str, default=os.path.join(REPO_ROOT_STR, "data", "HaluMem-Medium.jsonl"),
-                        help="Path to input JSONL file (default: data/HaluMem-Medium.jsonl)")
+    parser.add_argument("--in_file", type=str, default=None,
+                        help="Path to input JSONL file (defaults to DATA_DIR/HaluMem/HaluMem-Medium.jsonl or HALU_DATA_PATH)")
     parser.add_argument("--out_file", type=str, default=None,
                         help="Path to write retrieval results JSON (explicit file)")
     parser.add_argument("--out_dir", type=str, default=None,
@@ -110,22 +115,28 @@ def parse_args(argv=None):
                         help="Comma-separated graphrag modes to use for QueryParam")
     parser.add_argument("--only_need_context", action="store_true", default=False,
                         help="Only return context in query results (keeps behavior parity)")
-    parser.add_argument("--graph_root", type=str, default=os.path.join(REPO_ROOT_STR, "data", "nc-graph_halu_mem_medium-4o-mini"),
-                        help="Path to graph working directory root produced by halu_construct_graph (default: data/nc-graph_halu_mem_medium-4o-mini)")
+    parser.add_argument("--graph_root", type=str, default=None,
+                        help="Path to graph working directory root produced by halu_construct_graph")
+    parser.add_argument("--top_k", type=int, default=cfg.get_int("TOP_K", 20),
+                        help="Top-k retrieval size used when querying graphs")
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    entry_list = load_entries(args.in_file)
-    print(f"Loaded {len(entry_list)} entries from {args.in_file}")
+    in_file = resolve_halu_dataset_path(args.in_file)
+    graph_root = resolve_halu_graph_root(args.graph_root, dataset_path=in_file)
+    entry_list = load_entries(in_file)
+    print(f"Loaded {len(entry_list)} entries from {in_file}")
+    print(f"Reading graph artifacts from {graph_root}")
     retrive_eval(entry_list,
-                args.graph_root,
+                graph_root,
                 out_path=args.out_file,
                 out_dir=args.out_dir,
                 embedding=args.embedding,
                 graphrag_mode=args.graphrag_mode,
-                only_need_context=args.only_need_context)
+                only_need_context=args.only_need_context,
+                top_k=args.top_k)
 
 
 if __name__ == "__main__":

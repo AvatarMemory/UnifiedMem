@@ -303,16 +303,16 @@ def aggregate_eval_results(eval_results):
                 interference_memory_scores += 1
             interference_memory_valid_num += 1
 
-    eval_results["overall_score"]["memory_integrity"]["recall(all)"] = memory_integrity_scores / memory_integrity_num
-    eval_results["overall_score"]["memory_integrity"]["recall(valid)"] = memory_integrity_scores / memory_integrity_valid_num
-    eval_results["overall_score"]["memory_integrity"]["weighted_recall(all)"] = memory_integrity_weighted_scores / memory_integrity_weighted_num
-    eval_results["overall_score"]["memory_integrity"]["weighted_recall(valid)"] = memory_integrity_weighted_scores / memory_integrity_weighted_valid_num
+    eval_results["overall_score"]["memory_integrity"]["recall(all)"] = safe_div(memory_integrity_scores, memory_integrity_num)
+    eval_results["overall_score"]["memory_integrity"]["recall(valid)"] = safe_div(memory_integrity_scores, memory_integrity_valid_num)
+    eval_results["overall_score"]["memory_integrity"]["weighted_recall(all)"] = safe_div(memory_integrity_weighted_scores, memory_integrity_weighted_num)
+    eval_results["overall_score"]["memory_integrity"]["weighted_recall(valid)"] = safe_div(memory_integrity_weighted_scores, memory_integrity_weighted_valid_num)
     eval_results["overall_score"]["memory_integrity"]["memory_valid_importance_sum"] = memory_integrity_weighted_valid_num
     eval_results["overall_score"]["memory_integrity"]["memory_importance_sum"] = memory_integrity_weighted_num
     eval_results["overall_score"]["memory_integrity"]["memory_valid_num"] = memory_integrity_valid_num
     eval_results["overall_score"]["memory_integrity"]["memory_num"] = memory_integrity_num
-    eval_results["overall_score"]["memory_accuracy"]["interference_accuracy(all)"] = interference_memory_scores / interference_memory_num
-    eval_results["overall_score"]["memory_accuracy"]["interference_accuracy(valid)"] = interference_memory_scores / interference_memory_valid_num
+    eval_results["overall_score"]["memory_accuracy"]["interference_accuracy(all)"] = safe_div(interference_memory_scores, interference_memory_num)
+    eval_results["overall_score"]["memory_accuracy"]["interference_accuracy(valid)"] = safe_div(interference_memory_scores, interference_memory_valid_num)
     eval_results["overall_score"]["memory_accuracy"]["interference_memory_valid_num"] = interference_memory_valid_num
     eval_results["overall_score"]["memory_accuracy"]["interference_memory_num"] = interference_memory_num
 
@@ -343,12 +343,12 @@ def aggregate_eval_results(eval_results):
         memory_accuracy_weighted_scores += 0.5 * item["memory_accuracy_score"]
         memory_accuracy_valid_num += 1
 
-    eval_results["overall_score"]["memory_accuracy"]["target_accuracy(all)"] = target_memory_accuracy_scores / target_memory_accuracy_num
-    eval_results["overall_score"]["memory_accuracy"]["target_accuracy(valid)"] = target_memory_accuracy_scores / target_memory_accuracy_valid_num
+    eval_results["overall_score"]["memory_accuracy"]["target_accuracy(all)"] = safe_div(target_memory_accuracy_scores, target_memory_accuracy_num)
+    eval_results["overall_score"]["memory_accuracy"]["target_accuracy(valid)"] = safe_div(target_memory_accuracy_scores, target_memory_accuracy_valid_num)
     eval_results["overall_score"]["memory_accuracy"]["target_memory_valid_num"] = target_memory_accuracy_valid_num
     eval_results["overall_score"]["memory_accuracy"]["target_memory_num"] = target_memory_accuracy_num
-    eval_results["overall_score"]["memory_accuracy"]["weighted_accuracy(all)"] = memory_accuracy_weighted_scores / memory_accuracy_num
-    eval_results["overall_score"]["memory_accuracy"]["weighted_accuracy(valid)"] = memory_accuracy_weighted_scores / memory_accuracy_valid_num
+    eval_results["overall_score"]["memory_accuracy"]["weighted_accuracy(all)"] = safe_div(memory_accuracy_weighted_scores, memory_accuracy_num)
+    eval_results["overall_score"]["memory_accuracy"]["weighted_accuracy(valid)"] = safe_div(memory_accuracy_weighted_scores, memory_accuracy_valid_num)
     eval_results["overall_score"]["memory_accuracy"]["memory_valid_num"] = memory_accuracy_valid_num
     eval_results["overall_score"]["memory_accuracy"]["memory_num"] = memory_accuracy_num
 
@@ -380,16 +380,16 @@ def aggregate_eval_results(eval_results):
         update_memory_valid_num += 1
 
     if update_memory_num > 0:
-        eval_results["overall_score"]["memory_update"]["correct_update_memory_ratio(all)"] = correct_update_memory_num / update_memory_num
-        eval_results["overall_score"]["memory_update"]["hallucination_update_memory_ratio(all)"] = hallucination_update_memory_num / update_memory_num
-        eval_results["overall_score"]["memory_update"]["omission_update_memory_ratio(all)"] = omission_update_memory_num / update_memory_num
-        eval_results["overall_score"]["memory_update"]["other_update_memory_ratio(all)"] = other_update_memory_num / update_memory_num
+        eval_results["overall_score"]["memory_update"]["correct_update_memory_ratio(all)"] = safe_div(correct_update_memory_num, update_memory_num)
+        eval_results["overall_score"]["memory_update"]["hallucination_update_memory_ratio(all)"] = safe_div(hallucination_update_memory_num, update_memory_num)
+        eval_results["overall_score"]["memory_update"]["omission_update_memory_ratio(all)"] = safe_div(omission_update_memory_num, update_memory_num)
+        eval_results["overall_score"]["memory_update"]["other_update_memory_ratio(all)"] = safe_div(other_update_memory_num, update_memory_num)
     
     if update_memory_valid_num > 0:
-        eval_results["overall_score"]["memory_update"]["correct_update_memory_ratio(valid)"] = correct_update_memory_num / update_memory_valid_num
-        eval_results["overall_score"]["memory_update"]["hallucination_update_memory_ratio(valid)"] = hallucination_update_memory_num / update_memory_valid_num
-        eval_results["overall_score"]["memory_update"]["omission_update_memory_ratio(valid)"] = omission_update_memory_num / update_memory_valid_num
-        eval_results["overall_score"]["memory_update"]["other_update_memory_ratio(valid)"] = other_update_memory_num / update_memory_valid_num
+        eval_results["overall_score"]["memory_update"]["correct_update_memory_ratio(valid)"] = safe_div(correct_update_memory_num, update_memory_valid_num)
+        eval_results["overall_score"]["memory_update"]["hallucination_update_memory_ratio(valid)"] = safe_div(hallucination_update_memory_num, update_memory_valid_num)
+        eval_results["overall_score"]["memory_update"]["omission_update_memory_ratio(valid)"] = safe_div(omission_update_memory_num, update_memory_valid_num)
+        eval_results["overall_score"]["memory_update"]["other_update_memory_ratio(valid)"] = safe_div(other_update_memory_num, update_memory_valid_num)
     
     eval_results["overall_score"]["memory_update"]["update_memory_valid_num"] = update_memory_valid_num
     eval_results["overall_score"]["memory_update"]["update_memory_num"] = update_memory_num
@@ -417,12 +417,12 @@ def aggregate_eval_results(eval_results):
 
         qa_valid_num += 1
 
-    eval_results["overall_score"]["question_answering"]["correct_qa_ratio(all)"] = correct_qa_num / qa_num
-    eval_results["overall_score"]["question_answering"]["correct_qa_ratio(valid)"] = correct_qa_num / qa_valid_num
-    eval_results["overall_score"]["question_answering"]["hallucination_qa_ratio(all)"] = hallucination_qa_num / qa_num
-    eval_results["overall_score"]["question_answering"]["hallucination_qa_ratio(valid)"] = hallucination_qa_num / qa_valid_num
-    eval_results["overall_score"]["question_answering"]["omission_qa_ratio(all)"] = omission_qa_num / qa_num
-    eval_results["overall_score"]["question_answering"]["omission_qa_ratio(valid)"] = omission_qa_num / qa_valid_num
+    eval_results["overall_score"]["question_answering"]["correct_qa_ratio(all)"] = safe_div(correct_qa_num, qa_num)
+    eval_results["overall_score"]["question_answering"]["correct_qa_ratio(valid)"] = safe_div(correct_qa_num, qa_valid_num)
+    eval_results["overall_score"]["question_answering"]["hallucination_qa_ratio(all)"] = safe_div(hallucination_qa_num, qa_num)
+    eval_results["overall_score"]["question_answering"]["hallucination_qa_ratio(valid)"] = safe_div(hallucination_qa_num, qa_valid_num)
+    eval_results["overall_score"]["question_answering"]["omission_qa_ratio(all)"] = safe_div(omission_qa_num, qa_num)
+    eval_results["overall_score"]["question_answering"]["omission_qa_ratio(valid)"] = safe_div(omission_qa_num, qa_valid_num)
     eval_results["overall_score"]["question_answering"]["qa_valid_num"] = qa_valid_num
     eval_results["overall_score"]["question_answering"]["qa_num"] = qa_num
 
@@ -446,8 +446,8 @@ def aggregate_eval_results(eval_results):
     for key in eval_results["overall_score"]["memory_type_accuracy"]:
         total = eval_results["overall_score"]["memory_type_accuracy"][key]['total_num']
         if total > 0:
-            eval_results["overall_score"]["memory_type_accuracy"][key]['memory_integrity_acc'] = eval_results["overall_score"]["memory_type_accuracy"][key]['memory_integrity_acc'] / total
-            eval_results["overall_score"]["memory_type_accuracy"][key]['memory_update_acc'] = eval_results["overall_score"]["memory_type_accuracy"][key]['memory_update_acc'] / total
+            eval_results["overall_score"]["memory_type_accuracy"][key]['memory_integrity_acc'] = safe_div(eval_results["overall_score"]["memory_type_accuracy"][key]['memory_integrity_acc'], total)
+            eval_results["overall_score"]["memory_type_accuracy"][key]['memory_update_acc'] = safe_div(eval_results["overall_score"]["memory_type_accuracy"][key]['memory_update_acc'], total)
             eval_results["overall_score"]["memory_type_accuracy"][key]['memory_acc'] = eval_results["overall_score"]["memory_type_accuracy"][key]['memory_integrity_acc'] + eval_results["overall_score"]["memory_type_accuracy"][key]['memory_update_acc']
 
     return eval_results
@@ -461,10 +461,59 @@ def iter_jsonl(file_path):
                 yield json.loads(line)
 
 
+def resolve_input_file(file_path: str | None = None, results_dir: str | None = None) -> str:
+    env_file = cfg.getenv("HALU_EVAL_FILE", None)
+    env_dir = cfg.getenv("HALU_EVAL_RESULTS_DIR", None)
+
+    if file_path:
+        candidate = os.path.abspath(file_path)
+        if os.path.isdir(candidate):
+            results_dir = candidate
+        else:
+            return candidate
+
+    results_dir = results_dir or env_dir
+    if not results_dir and env_file:
+        return os.path.abspath(env_file)
+
+    if not results_dir:
+        raise ValueError("Please provide --file_path or --results_dir.")
+
+    results_dir = os.path.abspath(results_dir)
+    candidates = []
+    for name in os.listdir(results_dir):
+        if not name.endswith(".jsonl"):
+            continue
+        full_path = os.path.join(results_dir, name)
+        if name.endswith("_eval_results.jsonl") or name.endswith("_test_eval_results.jsonl"):
+            candidates.append(full_path)
+
+    if not candidates:
+        candidates = [
+            os.path.join(results_dir, name)
+            for name in os.listdir(results_dir)
+            if name.endswith(".jsonl")
+        ]
+
+    if not candidates:
+        raise FileNotFoundError(f"No JSONL evaluation input found under: {results_dir}")
+
+    candidates.sort(key=os.path.getmtime, reverse=True)
+    return candidates[0]
+
+
+def safe_div(numerator: float, denominator: float) -> float:
+    if denominator == 0:
+        return 0.0
+    return numerator / denominator
+
+
 def main(
     file_path: str,
-    user_num: int = 20,
-    max_workers: int = 10
+    user_num: int | None = None,
+    max_workers: int = 10,
+    output_file: str | None = None,
+    tmp_dir: str | None = None,
 ):
     # Require a path to the JSONL file containing per-user structures.
     if not os.path.isfile(file_path):
@@ -472,9 +521,16 @@ def main(
 
     data_path = os.path.abspath(file_path)
     base_dir = os.path.dirname(data_path)
-    output_file = os.path.join(base_dir, "eval_stat_result.json")
+    if output_file is None:
+        output_file = os.path.join(base_dir, "eval_stat_result.json")
+    else:
+        output_file = os.path.abspath(output_file)
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
-    tmp_dir = os.path.join(base_dir, "tmp2")
+    if tmp_dir is None:
+        tmp_dir = os.path.join(os.path.dirname(output_file), "tmp2")
+    else:
+        tmp_dir = os.path.abspath(tmp_dir)
     os.makedirs(tmp_dir, exist_ok=True)
 
     start_time = time.time()
@@ -495,7 +551,7 @@ def main(
             elapsed = time.time() - start_time
             print(f"✅ Finished user {uuid} ({idx}), elapsed {elapsed:.2f}s.")
 
-        if idx > user_num:
+        if user_num is not None and idx >= user_num:
             break
 
     add_dialogue_duration_time = 0
@@ -573,6 +629,7 @@ def main(
 
     elapsed = time.time() - start_time
     print(f"✅ All done in {elapsed:.2f}s. Results saved to {output_file}")
+    return output_file
 
 
 if __name__ == "__main__":
@@ -580,13 +637,58 @@ if __name__ == "__main__":
     parser.add_argument(
         "--file_path",
         type=str,
-        required=True,
-        help="Path to the `structure_eval_results.jsonl` file"
+        default=None,
+        help="Path to the `structure_eval_results.jsonl` file. May also be a directory."
+    )
+    parser.add_argument(
+        "--results_dir",
+        type=str,
+        default=cfg.getenv("HALU_EVAL_RESULTS_DIR", None),
+        help="Directory containing graph eval JSONL files. If set, the newest *_eval_results.jsonl is used."
+    )
+    parser.add_argument(
+        "--output_file",
+        type=str,
+        default=cfg.getenv("HALU_EVAL_OUTPUT_FILE", None),
+        help="Where to write eval_stat_result.json (defaults next to the input JSONL)."
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=cfg.getenv("HALU_EVAL_OUTPUT_DIR", None),
+        help="Directory where eval_stat_result.json will be written."
+    )
+    parser.add_argument(
+        "--tmp_dir",
+        type=str,
+        default=cfg.getenv("HALU_EVAL_TMP_DIR", None),
+        help="Directory for per-user cached intermediate results."
+    )
+    parser.add_argument(
+        "--user_num",
+        type=int,
+        default=cfg.get_int("HALU_EVAL_USER_NUM", 0) or None,
+        help="How many users to evaluate. Defaults to all users."
+    )
+    parser.add_argument(
+        "--max_workers",
+        type=int,
+        default=cfg.get_int("HALU_EVAL_MAX_WORKERS", 10),
+        help="Worker count used inside per-user evaluation."
     )
     args = parser.parse_args()
-    file_path = args.file_path
-    main(file_path)
+    file_path = resolve_input_file(args.file_path, args.results_dir)
 
-    base_dir = os.path.dirname(os.path.abspath(file_path))
-    output_file = os.path.join(base_dir, "eval_stat_result.json")
+    output_file = args.output_file
+    if output_file is None and args.output_dir:
+        output_file = os.path.join(os.path.abspath(args.output_dir), "eval_stat_result.json")
+
+    output_file = main(
+        file_path,
+        user_num=args.user_num,
+        max_workers=args.max_workers,
+        output_file=output_file,
+        tmp_dir=args.tmp_dir,
+    )
+
     print_scores(output_file)

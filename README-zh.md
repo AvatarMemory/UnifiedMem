@@ -86,6 +86,9 @@ export HF_HOME="/path/to/cache"        # HuggingFace 模型的缓存目录
 - `OPENAI_API_KEY` ：用于 OpenAI 兼容 LLM 后端的 API 密钥。
 - `OPENAI_BASE_URL`：本地或者第三方 vLLM/OpenAI 兼容服务器的基础 URL (例如 `http://localhost:8001/v1`)。
 - `LLM_MODEL`：用于生成的默认模型（例如 `gpt-4o-mini` 或 `meta-llama/Meta-Llama-3.1-8B-Instruct`）。
+- `INDEX_API_KEY` / `INDEX_BASE_URL` / `INDEX_LLM_MODEL`：可选的 index 阶段覆盖；未设置时回退到 `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `LLM_MODEL`。
+- `QA_API_KEY` / `QA_BASE_URL` / `QA_LLM_MODEL`：可选的 qa 阶段覆盖；未设置时使用同样的回退逻辑。
+- `QA_EVAL_API_KEY` / `QA_EVAL_BASE_URL` / `QA_EVAL_LLM_MODEL`：可选的 qa_eval 阶段覆盖；未设置时使用同样的回退逻辑。
 - `EMBEDDING_MODEL` / `EMBEDDING_RETRIEVER`：嵌入模型选择的默认值。
 - `EMBEDDING_API_URL`, `EMBEDDING_API_KEY` 用于第三方嵌入模型的参数
 

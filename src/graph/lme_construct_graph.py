@@ -33,7 +33,7 @@ def main(args=None):
     args = parse_args(args)
 
     # Determine model tag early (used when computing default out_dir)
-    model_tag = cfg.getenv('LLM_MODEL', 'gpt-4o-mini')
+    model_tag = cfg.get_stage_model('index', 'gpt-4o-mini')
 
     # If out_dir not explicitly provided, decide prefix based on dataset filename
     if args.out_dir is None:

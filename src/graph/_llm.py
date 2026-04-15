@@ -22,20 +22,20 @@ from .base import BaseKVStorage
 
 # Use centralized config loader instead of hardcoded PROJECT_ROOT
 import src.config as config
-# API key selection: prefer generic LLM_API_KEY, then OPENAI_API_KEY, then OPENAI_KEY
-OPENAI_KEY = config.getenv('LLM_API_KEY', config.getenv('OPENAI_API_KEY', default=config.getenv('OPENAI_KEY', default=None)))
-LLM_MODEL = config.getenv('LLM_MODEL', 'gpt-4o-mini')
-OPENAI_BASE_URL = config.getenv('OPENAI_BASE_URL', None)
+# Graph indexing / retrieval uses the index-stage model config.
+OPENAI_KEY = config.get_stage_api_key('index', default=config.getenv('OPENAI_KEY', default=None))
+LLM_MODEL = config.get_stage_model('index', 'gpt-4o-mini')
+OPENAI_BASE_URL = config.get_stage_base_url('index', None)
 # Embedding / model names and service URLs from config (with sensible defaults)
 CONTRIEVER_MODEL_NAME = config.getenv('CONTRIEVER_MODEL_NAME', 'facebook/contriever')
-OPENAI_EMBEDDING_MODEL = config.getenv('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small')
+OPENAI_EMBEDDING_MODEL = config.get_embedding_model('text-embedding-3-small')
 # Unified embedding config: single model name env var and optional API URL/key.
 # Use `EMBEDDING_MODEL` as the canonical model name for embeddings and also set
 # `OPENAI_EMBEDDING_MODEL` for backwards compatibility.
-EMBEDDING_MODEL = config.getenv('EMBEDDING_MODEL', OPENAI_EMBEDDING_MODEL)
+EMBEDDING_MODEL = config.get_embedding_model(OPENAI_EMBEDDING_MODEL)
 OPENAI_EMBEDDING_MODEL = EMBEDDING_MODEL
-EMBEDDING_API_URL = config.getenv('EMBEDDING_API_URL', OPENAI_BASE_URL)
-EMBEDDING_API_KEY = config.getenv('EMBEDDING_API_KEY', OPENAI_KEY)
+EMBEDDING_API_URL = config.get_embedding_base_url(OPENAI_BASE_URL)
+EMBEDDING_API_KEY = config.get_embedding_api_key(OPENAI_KEY)
 VLLM_BASE_URL = config.getenv('VLLM_BASE_URL', 'http://localhost:11230/v1')
 VLLM_MODEL_PATH = config.getenv('VLLM_MODEL_PATH', '/mnt/ceph/huggingface/Meta-Llama-3.1-8B-Instruct')
 

@@ -91,6 +91,9 @@ Recommended environment variables (see `.env.example`):
 - `OPENAI_API_KEY`: API key for OpenAI-compatible LLM backends.
 - `OPENAI_BASE_URL`: Base URL for local or third-party vLLM/OpenAI-compatible server (e.g. `http://localhost:8001/v1`).
 - `LLM_MODEL`: Default model for generation (e.g. `gpt-4o-mini` or `meta-llama/Meta-Llama-3.1-8B-Instruct`).
+- `INDEX_API_KEY` / `INDEX_BASE_URL` / `INDEX_LLM_MODEL`: Optional index-stage overrides. When unset, the code falls back to `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `LLM_MODEL`.
+- `QA_API_KEY` / `QA_BASE_URL` / `QA_LLM_MODEL`: Optional QA-generation-stage overrides with the same fallback behavior.
+- `QA_EVAL_API_KEY` / `QA_EVAL_BASE_URL` / `QA_EVAL_LLM_MODEL`: Optional QA-evaluation-stage overrides with the same fallback behavior.
 - `EMBEDDING_MODEL` / `EMBEDDING_RETRIEVER`: Defaults for embedding selection.
 - `EMBEDDING_API_URL`, `EMBEDDING_API_KEY`: Parameters for third-party embedding models.
 
@@ -566,6 +569,11 @@ Below are the commonly used environment variables in the repository (defaults ca
 - `LLM_MODEL`: Default model for generation (default: `gpt-4o-mini`).
   - Examples: `gpt-4o-mini`, `gpt-4o`, `meta-llama/Meta-Llama-3.1-8B-Instruct`.
 
+- `INDEX_API_KEY`, `INDEX_BASE_URL`, `INDEX_LLM_MODEL`: Optional index-stage overrides.
+- `QA_API_KEY`, `QA_BASE_URL`, `QA_LLM_MODEL`: Optional QA-generation-stage overrides.
+- `QA_EVAL_API_KEY`, `QA_EVAL_BASE_URL`, `QA_EVAL_LLM_MODEL`: Optional QA-evaluation-stage overrides.
+  - Note: Empty values are treated as unset, so the code falls back to `OPENAI_API_KEY`, `OPENAI_BASE_URL`, and `LLM_MODEL`.
+
 - `EMBEDDING_MODEL`: Embedding model for vectorization (default: `text-embedding-3-small`).
 - `EMBEDDING_RETRIEVER`: Embedding retriever selection (default: `flat-openai`).
 
@@ -579,7 +587,6 @@ Below are the commonly used environment variables in the repository (defaults ca
 - `SAVE_EVERY`: Checkpoint saving frequency for long tasks (default: `256`).
 
 - `LLM_TEMPERATURE`: Default temperature for LLM inference (default: `0.0`).
-- `QA_LLM`: Default LLM for QA (default: `gpt-4o-mini`).
 
 - `KEYPHRASE_MAX_TOKENS`, `KEYPHRASE_TEMPERATURE`: Default parameters for keyphrase extraction (defaults: `100`, `0.0` respectively).
 - `SUMMARY_MAX_TOKENS`, `SUMMARY_TEMPERATURE`: Default parameters for summary extraction (defaults: `500`, `0.0` respectively).

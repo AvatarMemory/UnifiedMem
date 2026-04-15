@@ -6,15 +6,17 @@ set -e
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$script_dir/.." && pwd)"
+. "$script_dir/_project_env.sh"
 
 # Defaults
-DATA_DIR="${DATA_DIR:-${REPO_ROOT}/data}"
-OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_s-${LLM_MODEL:-llama}}"
+DATA_DIR="${DATA_DIR:-$(get_project_env DATA_DIR "${REPO_ROOT}/data" "$REPO_ROOT")}"
+MODEL_TAG="${INDEX_MODEL:-$(get_stage_model index "gpt-4o-mini" "$REPO_ROOT")}"
+OUT_DIR="${OUT_DIR:-${REPO_ROOT}/data/graph_s-${MODEL_TAG}}"
 IN_FILE="${IN_FILE:-${DATA_DIR}/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json}"
 # Default embedding: prefer environment `EMBEDDING` if set, else `EMBEDDING_MODEL`, else 'auto'
 # EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-text-embedding-3-small}}"
-EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-contriever}}"
-ENTITY_NAMESPACE="${ENTITY_NAMESPACE:-}" # if empty, script will choose default
+EMBEDDING="${EMBEDDING:-${EMBEDDING_MODEL:-$(get_project_env EMBEDDING_MODEL "contriever" "$REPO_ROOT")}}"
+ENTITY_NAMESPACE="${ENTITY_NAMESPACE:-$(get_project_env ENTITY_NAMESPACE "" "$REPO_ROOT")}" # if empty, script will choose default
 
 show_help() {
   cat <<EOF
