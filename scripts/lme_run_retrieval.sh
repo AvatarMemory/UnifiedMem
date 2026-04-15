@@ -1,3 +1,11 @@
+#!/bin/bash
+
+set -euo pipefail
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$script_dir/.." && pwd)"
+. "$script_dir/_project_env.sh"
+
 in_file=${1:-"./data/longmemeval-cleaned/longmemeval_s_cleaned_deduplicate.json"}
 # in_file=${1:-"./data/longmemeval_s_cleaned.json"}
 retriever=${2:-"flat-contriever"}
@@ -5,7 +13,8 @@ retriever=${2:-"flat-contriever"}
 granularity=${3:-"session"}
 index_expansion=${4:-"session-userfact,session-keyphrase,session-summ"}  # none, session-summ, session-keyphrase, session-userfact
 index_expansion_join_mode=${5:-"merge"}   # separate, merge, merge_raw, none
-aux_model_alias=${7:-"llama-3.1-8b-instruct-ICL"}
+project_llm_model="${INDEX_MODEL:-$(get_stage_model index "gpt-4o-mini" "$REPO_ROOT")}"
+aux_model_alias=${7:-"$project_llm_model"}
 outfile_prefix=${8:-"tmp"}
 
 sanitize_for_path() {
@@ -36,10 +45,6 @@ model_zoo["qwen3-8b"]="qwen3-8b"
 model_zoo["qwen3_8b"]="qwen3-8b"
 aux_model=${model_zoo["$aux_model_alias"]:-"$aux_model_alias"}
 
-## Determine `home_dir` as the repository root (parent of this `scripts/` dir).
-## This keeps model cache inside the project by default.
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$script_dir/.." && pwd)"
 home_dir="$REPO_ROOT"
 
 export HF_HOME=${home_dir}/model_cache/

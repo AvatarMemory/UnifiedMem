@@ -12,6 +12,26 @@ from src.flat.lme_utils import Retriever, fetch_expansion_from_cache, resolve_mu
 from src import config as cfg
 
 
+def sanitize_for_path(model_name: str) -> str:
+    if model_name == "gpt-4o-mini":
+        return "gpt4o_mini"
+    if model_name == "gpt-5-mini":
+        return "gpt5_mini"
+    return str(model_name).replace("/", "_").replace(".", "_").replace("-", "_")
+
+
+def default_expansion_cache_paths() -> str:
+    model_alias = cfg.get_stage_model("index", "gpt-4o-mini")
+    base_dir = f"data/longmemeval-cleaned/expansions-{sanitize_for_path(model_alias)}_temp1"
+    return ",".join(
+        [
+            f"{base_dir}/session-userfact.json",
+            f"{base_dir}/session-keyphrase_.json",
+            f"{base_dir}/session-summ_.json",
+        ]
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--in_file', type=str, default='data/longmemeval-cleaned/longmemeval_s_cleaned.json')
@@ -32,7 +52,7 @@ def parse_args():
                         help='Comma-separated list of expansion methods. E.g., "session-summ,session-userfact"')
     parser.add_argument('--index_expansion_llm', type=str, default=None)
     parser.add_argument('--index_expansion_result_cache', type=str, 
-                        default='data/longmemeval-cleaned/expansions-llama3.1_8b/session-userfact.json,data/longmemeval-cleaned/expansions-llama3.1_8b/session-keyphrase.json,data/longmemeval-cleaned/expansions-llama3.1_8b/session-summ.json',
+                        default=default_expansion_cache_paths(),
                         help='Comma-separated list of cache files corresponding to expansion methods')
     parser.add_argument('--index_expansion_result_join_mode', type=str, default='merge', 
                         choices=['separate', 'none', 'merge', 'merge_raw'])

@@ -1,0 +1,35 @@
+site_name: UnifiedMem
+site_description: Documentation for UnifiedMem
+site_url: https://YOUR_GITHUB_USERNAME.github.io/UnifiedMem/
+repo_url: https://github.com/YOUR_GITHUB_USERNAME/UnifiedMem
+repo_name: UnifiedMem
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Home: index.md
+  - Quick Start: quickstart.md
+  - Environment Variables: environment.md
+  - LongMemEval: longmemeval.md
+  - HaluMem: halumem.md
+  - Scripts: scripts.md
+  - GitHub Pages: github-pages.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
