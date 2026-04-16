@@ -20,7 +20,7 @@ UnifiedMem 是一个面向长期对话记忆研究的统一框架，支持 flat 
 - `qa`
 - `qa_eval`
 
-## News
+## 🎉 News
 
 - **2026.04.06** Our [**UnifiedMem**](https://arxiv.org/abs/2601.01280v3) is accepted by ACL 2026 Main Conference!
 
@@ -36,7 +36,7 @@ UnifiedMem 是一个面向长期对话记忆研究的统一框架，支持 flat 
 - 检索与索引共享一套 embedding 配置
 - 提供 LongMemEval 与 HaluMem 的评测流程
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. 安装依赖
 
@@ -104,7 +104,7 @@ python data_preprocessing/lme_deduplicate.py
 - `data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json`
 - `data/HaluMem/HaluMem-Medium.jsonl`
 
-### 4. 跑一个流程
+### 4. ▶️ 运行流程
 
 LongMemEval flat 检索：
 
@@ -124,18 +124,22 @@ LongMemEval 图检索：
 ./scripts/graph_lme_run_retrieval.sh --out-dir results/graph_lme
 ```
 
-HaluMem 图全流程：
+HaluMem 图完整评估流程：
 
 ```bash
 ./scripts/graph_halu_eval_pipeline.sh
 ```
 
-注意：HaluMem 的评估阶段会消耗大量 judge model token，尤其是 QA 和最终打分阶段。建议先从 `HaluMem-Medium` 开始，先确认 `.env` 里的模型配置无误，再决定是否直接启动完整评估流程。
-
-HaluMem flat 流程：
+HaluMem flat 运行入口：
 
 ```bash
 ./scripts/halu_run.sh --dataset medium
+```
+
+`halu_run.sh`不包含 QA 的评估。注意：HaluMem 的评估阶段会消耗大量 judge model token，如需继续评估 flat 结果：
+
+```bash
+python -m evals.halu_eval --file_path <path-to-structure_eval_results.jsonl>
 ```
 
 ## 文档

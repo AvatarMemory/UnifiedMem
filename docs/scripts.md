@@ -9,7 +9,7 @@ This page maps each recommended script to its role.
 | `scripts/flat_lme_build_index.sh` | Build LongMemEval flat expansion caches | Generates summary, keyphrase, and userfact caches |
 | `scripts/graph_lme_construct.sh` | Build LongMemEval graph artifacts | Recommended graph indexing entry |
 | `scripts/graph_lme_run_retrieval.sh` | Run LongMemEval graph retrieval | Clean named-argument interface |
-| `scripts/halu_run.sh` | Run HaluMem flat memory evaluation | Main flat HaluMem entry |
+| `scripts/halu_run.sh` | Run HaluMem flat memory evaluation | Main flat HaluMem entry; final QA-eval scoring is a separate step |
 | `scripts/graph_halu_construct.sh` | Build HaluMem graph artifacts | Graph indexing for HaluMem |
 | `scripts/graph_halu_run_retrieval.sh` | Run HaluMem graph retrieval | Produces retrieval JSON |
 | `scripts/graph_halu_eval_pipeline.sh` | Run end-to-end HaluMem graph evaluation | Best single-command graph pipeline |

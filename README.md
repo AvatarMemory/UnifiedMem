@@ -20,7 +20,7 @@ UnifiedMem is a unified framework for long-term dialog memory research. It suppo
 - `qa`
 - `qa_eval`
 
-## News
+## 🎉 News
 
 - **2026.04.06** Our [**UnifiedMem**](https://arxiv.org/abs/2601.01280v3) is accepted by ACL 2026 Main Conference!
 
@@ -36,7 +36,7 @@ Key capabilities:
 - shared embedding configuration across indexing and retrieval
 - evaluation workflows for both LongMemEval and HaluMem
 
-## Quick Start
+## 🚀 Quick Start
 
 ### 1. Install
 
@@ -104,7 +104,7 @@ After preprocessing, the pipelines in this repository usually use:
 - `data/longmemeval-cleaned/longmemeval_oracle_deduplicate.json`
 - `data/HaluMem/HaluMem-Medium.jsonl`
 
-### 4. Run one pipeline
+### 4. ▶️ Run Pipeline
 
 LongMemEval flat retrieval:
 
@@ -124,18 +124,22 @@ LongMemEval graph retrieval:
 ./scripts/graph_lme_run_retrieval.sh --out-dir results/graph_lme
 ```
 
-HaluMem graph full pipeline:
+HaluMem graph full evaluation pipeline:
 
 ```bash
 ./scripts/graph_halu_eval_pipeline.sh
 ```
 
-Note: HaluMem evaluation can consume a large number of judge-model tokens, especially in the QA and scoring stages. Start with `HaluMem-Medium`, verify your `.env` model settings first, and be cautious before launching the full evaluation pipeline.
-
-HaluMem flat pipeline:
+HaluMem flat run:
 
 ```bash
 ./scripts/halu_run.sh --dataset medium
+```
+
+`halu_run.sh` don't include QA-eval scoring. Note: HaluMem evaluation can consume a large number of judge-model tokens, To score flat results:
+
+```bash
+python -m evals.halu_eval --file_path <path-to-structure_eval_results.jsonl>
 ```
 
 ## Documentation

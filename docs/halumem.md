@@ -14,7 +14,7 @@ Optional longer dataset:
 
 ## Recommended Workflow: Graph Full Pipeline
 
-If you want one command that covers the full graph evaluation flow, start here:
+If you want one command that covers the full graph evaluation flow, including QA generation and final QA-eval scoring, start here:
 
 ```bash
 ./scripts/graph_halu_eval_pipeline.sh
@@ -98,6 +98,8 @@ For the flat updatable memory system:
 ./scripts/halu_run.sh --dataset medium
 ```
 
+This entry runs the flat structured-memory workflow and can generate QA responses, but it does not invoke the separate final QA-eval scoring step in `python -m evals.halu_eval`.
+
 Common overrides:
 
 ```bash
@@ -122,6 +124,14 @@ Important options:
 - `--resume`
 - `--enable_update`
 
+To compute final QA evaluation metrics for a flat run, score the generated `structure_eval_results.jsonl` separately:
+
+```bash
+python -m evals.halu_eval \
+  --file_path <path-to-structure_eval_results.jsonl> \
+  --output_file <score_json>
+```
+
 ## Output Files
 
 Typical graph pipeline outputs:
@@ -131,4 +141,4 @@ Typical graph pipeline outputs:
 - `*_eval_results.jsonl`
 - `eval_stat_result.json`
 
-Typical flat outputs include retrieval logs, extracted memory records, and QA outputs when QA is enabled.
+Typical flat outputs include retrieval logs, extracted memory records, and `structure_eval_results.jsonl` when the run completes. Final `eval_stat_result.json` for flat runs requires a separate `python -m evals.halu_eval` step.

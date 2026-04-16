@@ -95,7 +95,7 @@ Run retrieval:
 ./scripts/graph_lme_run_retrieval.sh --out-dir results/graph_lme
 ```
 
-## 6. First run: HaluMem graph full pipeline
+## 6. First run: HaluMem graph full evaluation pipeline
 
 ```bash
 ./scripts/graph_halu_eval_pipeline.sh
@@ -103,11 +103,15 @@ Run retrieval:
 
 HaluMem evaluation can consume a large number of judge-model tokens, especially in the QA and scoring stages. Start with `HaluMem-Medium`, verify your `.env` model settings first, and be cautious before launching the full evaluation pipeline.
 
-## 7. First run: HaluMem flat evaluation
+This is the recommended one-command entry when you need both QA generation and final QA-eval scoring.
+
+## 7. First run: HaluMem flat run
 
 ```bash
 ./scripts/halu_run.sh --dataset medium
 ```
+
+`./scripts/halu_run.sh` runs the flat structured-memory workflow and can generate QA responses, but it does not run the separate final QA-eval scoring stage.
 
 Useful overrides:
 
@@ -118,6 +122,12 @@ Useful overrides:
   --llm-model qwen3-8b \
   --qa-llm qwen3-8b \
   --top-k 20
+```
+
+If you also want final QA evaluation metrics for the flat run, score the generated `structure_eval_results.jsonl` separately:
+
+```bash
+python -m evals.halu_eval --file_path <path-to-structure_eval_results.jsonl>
 ```
 
 ## What to read next
